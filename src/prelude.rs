@@ -1,4 +1,4 @@
-pub use crate::api::certificates::{CertificateLoader, KeyPairs, AuthenticationKeyPair, RefreshKeyPair, PublicKey, PrivateKey, SigningKeys};
+pub use crate::api::certificates::{CertificateLoader, PublicKey, PrivateKey, SigningKeys};
 pub use crate::api::session::{Token, Session};
 pub use crate::api::vault::{Vault, UserIdentity, UserAuthentication};
 pub use crate::api::components::{Persistence, PersistenceHasher, KeyStore};

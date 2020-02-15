@@ -231,57 +231,6 @@ impl CertificateLoader<&str> for FromDisk {
 }
 
 
-impl TryFrom<(FromDisk, &str, &str, &str, &str)> for KeyPairs {
-    type Error = Error;
-
-    fn try_from((loader, public_authentication_certificate_path, private_authentication_certificate_path, public_refresh_certificate_path, private_refresh_certificate_path): (FromDisk, &str, &str, &str, &str)) -> Result<Self, Self::Error> {
-        let public_certificate = loader.load_public_certificate(
-            public_authentication_certificate_path
-        )?;
-        let private_certificate = loader.load_private_certificate(
-            private_authentication_certificate_path
-        )?;
-        let authentication = AuthenticationKeyPair::new(public_certificate, private_certificate);
-
-        let public_certificate = loader.load_public_certificate(
-            public_refresh_certificate_path
-        )?;
-        let private_certificate = loader.load_private_certificate(
-            private_refresh_certificate_path
-        )?;
-        let refresh = RefreshKeyPair::new(public_certificate, private_certificate);
-
-        Ok(KeyPairs::new(authentication, refresh))
-    }
-}
-
-/// This will panic is the default keys are not present
-/// Run ./generate.sh under store
-impl Default for KeyPairs {
-    fn default() -> Self {
-        let disk = FromDisk;
-
-        let public_certificate_path = DEFAULT_PUBLIC_AUTHENTICATION_TOKEN_PATH;
-        let private_certificate_path = DEFAULT_PRIVATE_AUTHENTICATION_TOKEN_PATH;
-
-        let public_certificate = disk.load_public_certificate(public_certificate_path).ok().unwrap();
-        let private_certificate = disk.load_private_certificate(private_certificate_path).ok().unwrap();
-
-        let authentication = AuthenticationKeyPair::new(public_certificate, private_certificate);
-
-        let public_certificate_path = DEFAULT_PUBLIC_REFRESH_TOKEN_PATH;
-        let private_certificate_path = DEFAULT_PRIVATE_REFRESH_TOKEN_PATH;
-
-        let public_certificate = disk.load_public_certificate(public_certificate_path).ok().unwrap();
-        let private_certificate = disk.load_private_certificate(private_certificate_path).ok().unwrap();
-
-        let refresh = RefreshKeyPair::new(public_certificate, private_certificate);
-
-        Self::new(authentication, refresh)
-    }
-}
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -296,31 +245,6 @@ mod tests {
         let z: &str = elems.get(1).unwrap();
         z.to_string()
     }
-
-//    #[test]
-//    fn validate_round_trip() {
-//        let keys = KeyPairs::default();
-//        let user = "user";
-//        let _ref = 1u64;
-//        let token = encode_client_token(
-//            keys.private_authentication_certificate(),
-//            user.as_bytes(),
-//            None,
-//            _ref,
-//            None,
-//            None,
-//            None,
-//        );
-//        let token = token.ok().unwrap();
-//        let computed = decode_client_token(
-//            keys.public_authentication_certificate(),
-//            token.as_ref(),
-//        );
-//        let computed = computed.ok().unwrap();
-//        assert_eq!(computed.reference(), _ref);
-//        assert_eq!(computed.sub().as_slice(), user.as_bytes());
-//    }
-
 
     #[test]
     fn missing_certificates() {
@@ -355,15 +279,32 @@ mod tests {
         let public_refresh_certificate_path = format!("{}/{}", store, tail(DEFAULT_PUBLIC_REFRESH_TOKEN_PATH));
         let private_refresh_certificate_path = format!("{}/{}", store, tail(DEFAULT_PRIVATE_REFRESH_TOKEN_PATH));
 
-        let key: Result<KeyPairs, Error> = TryFrom::try_from(
-            (
-                loader,
-                public_authentication_certificate_path.as_str(),
-                private_authentication_certificate_path.as_str(),
-                public_refresh_certificate_path.as_str(),
-                private_refresh_certificate_path.as_str())
+        let path = KeyPaths::new(
+            public_authentication_certificate_path,
+            private_authentication_certificate_path,
+            public_refresh_certificate_path,
+            private_refresh_certificate_path,
         );
-        assert!(key.is_ok());
+
+        let disk = FromDisk;
+        let public_authentication = disk.load_public_certificate(path.public_authentication_path()).ok().unwrap();
+        let private_authentication = disk.load_private_certificate(path.private_authentication_path()).ok().unwrap();
+        let public_refresh = disk.load_public_certificate(path.public_refresh_path()).ok().unwrap();
+        let private_refresh = disk.load_private_certificate(path.private_refresh_path()).ok().unwrap();
+
+        let keys = Keys::new(
+            public_authentication.clone(),
+            private_authentication.clone(),
+            public_refresh.clone(),
+            private_refresh.clone());
+
+        let keys = RSAKeys::from(keys);
+
+        assert_eq!(keys.public_authentication().as_bytes(), public_authentication.as_slice());
+        assert_eq!(keys.private_authentication().as_bytes(), private_authentication.as_slice());
+        assert_eq!(keys.public_refresh().as_bytes(), public_refresh.as_slice());
+        assert_eq!(keys.private_refresh().as_bytes(), private_refresh.as_slice());
+
         fs::remove_dir_all(store).unwrap();
     }
 
