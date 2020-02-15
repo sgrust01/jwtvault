@@ -100,17 +100,6 @@
 //! ```
 //! use jwtvault::prelude::*;
 //!
-//! struct MyStruct(KeyPairs);
-//! impl MyStruct {
-//!     pub fn new() -> Self{
-//!         Self(KeyPairs::default())
-//!     }
-//! }
-//! impl KeyStore for MyStruct {
-//!     fn key_pairs(&self) -> &KeyPairs {
-//!         &self.0
-//!     }
-//! }
 //! ```
 
 
@@ -164,7 +153,7 @@ pub trait Persistence {
 /// * Authentication Key Pair (Public and Private) <br/>
 /// * Refresh Key Pair (Public and Private) <br/>
 
-pub trait KeyStore {
+pub trait KeyStore<S: SigningKeys> {
     /// Key Pairs
-    fn key_pairs(&self) -> &KeyPairs;
+    fn key_pairs(&self) -> &S;
 }

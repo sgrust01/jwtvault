@@ -39,17 +39,18 @@ use crate::plugins::hashers::default::MemoryHasher;
 ///
 /// See [DefaultVault](struct.DefaultVault.html) for full implementation
 /// Also see example on how to use it
-pub struct MemoryVault<H: Hasher + Default> {
+pub struct MemoryVault<H: Hasher + Default, V: SigningKeys + Clone> {
     user_passwords: HashMap<String, String>,
     store: HashMap<u64, String>,
-    keys: KeyPairs,
+    keys: V,
     hasher: H,
 }
 
-impl<H: Hasher + Default> MemoryVault<H> {
-    pub fn new(user_passwords: HashMap<String, String>, hasher: H) -> Self {
+impl<H: Hasher + Default, V: SigningKeys + Clone> MemoryVault<H, V> {
+    pub fn new(user_passwords: HashMap<String, String>, hasher: H, keys: V) -> Self {
         let store = HashMap::new();
-        let keys = KeyPairs::default();
+
+
         MemoryVault {
             user_passwords,
             store,
@@ -69,14 +70,14 @@ impl<H: Hasher + Default> MemoryVault<H> {
 
 
 /// Default Implementation
-impl<H: Hasher + Default> KeyStore for MemoryVault<H> {
-    fn key_pairs(&self) -> &KeyPairs {
+impl<H: Hasher + Default, S: SigningKeys + Clone> KeyStore<S> for MemoryVault<H, S> {
+    fn key_pairs(&self) -> &S {
         &self.keys
     }
 }
 
 /// Default Implementation
-impl<H: Hasher + Default> UserIdentity for MemoryVault<H> {
+impl<H: Hasher + Default, S: SigningKeys + Clone> UserIdentity for MemoryVault<H, S> {
     fn check_same_user<T: AsRef<[u8]>>(&self, user: T, user_from_token: T) -> Result<(), Error> {
         if user.as_ref() == user_from_token.as_ref() {
             return Ok(());
@@ -87,14 +88,14 @@ impl<H: Hasher + Default> UserIdentity for MemoryVault<H> {
     }
 }
 
-impl<H: Hasher + Default> PersistenceHasher<H> for MemoryVault<H> {
+impl<H: Hasher + Default, S: SigningKeys + Clone> PersistenceHasher<H> for MemoryVault<H, S> {
     fn engine(&self) -> H {
         <H as Default>::default()
     }
 }
 
 /// Default Implementation
-impl<H: Hasher + Default> UserAuthentication for MemoryVault<H> {
+impl<H: Hasher + Default, S: SigningKeys + Clone> UserAuthentication for MemoryVault<H, S> {
     /// Return normally if login succeeds else return an Error
     fn check_user_valid<T: AsRef<[u8]>>(&mut self, user: T, pass: T) -> Result<Option<Session>, Error> {
         let user = String::from_utf8(user.as_ref().to_vec())?;
@@ -118,7 +119,7 @@ impl<H: Hasher + Default> UserAuthentication for MemoryVault<H> {
 }
 
 /// Default Implementation
-impl<H: Hasher + Default> Persistence for MemoryVault<H> {
+impl<H: Hasher + Default, S: SigningKeys + Clone> Persistence for MemoryVault<H, S> {
     fn store(&mut self, key: u64, value: String) {
         self.store.insert(key, value);
     }
@@ -136,39 +137,39 @@ impl<H: Hasher + Default> Persistence for MemoryVault<H> {
 /// * Use DefaultHasher <br/>
 /// * Use certificates from Disk <br/>
 /// * Use Static users <br/>
-pub struct DefaultVault(MemoryVault<MemoryHasher>);
+pub struct DefaultVault<S: SigningKeys + Clone>(MemoryVault<MemoryHasher, S>);
 
-impl Deref for DefaultVault {
-    type Target = MemoryVault<MemoryHasher>;
+impl<S: SigningKeys + Clone> Deref for DefaultVault<S> {
+    type Target = MemoryVault<MemoryHasher, S>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for DefaultVault {
+impl<S: SigningKeys + Clone> DerefMut for DefaultVault<S> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl Clone for DefaultVault {
-    fn clone(&self) -> Self {
-        Self::new(self.user_passwords().clone())
-    }
-}
+//impl<V: SigningKeys + Clone> Clone for DefaultVault<V> {
+//    fn clone(&self) -> Self {
+//        Self::new(self.user_passwords().clone())
+//    }
+//}
 
 
-impl DefaultVault {
-    pub fn new(user_passwords: HashMap<String, String>) -> Self {
-        let memory_vault = MemoryVault::new(user_passwords, MemoryHasher::default());
+impl<S: SigningKeys + Clone> DefaultVault<S> {
+    pub fn new(user_passwords: HashMap<String, String>, keys: S) -> Self {
+        let memory_vault = MemoryVault::new(user_passwords, MemoryHasher::default(), keys);
         DefaultVault(memory_vault)
     }
 }
 
 
 /// Default Implementation
-impl UserAuthentication for DefaultVault {
+impl<S: SigningKeys + Clone> UserAuthentication for DefaultVault<S> {
     /// Return normally if login succeeds else return an Error
     fn check_user_valid<T: AsRef<[u8]>>(&mut self, user: T, pass: T) -> Result<Option<Session>, Error> {
         let user = String::from_utf8(user.as_ref().to_vec())?;
@@ -221,7 +222,16 @@ mod tests {
         let password_for_john = "john";
         let _ = "Jane Doe";
         let password_for_jane = "jane";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
 
         // login unsuccessful due to incorrect password
         let token = vault.login(user_john, password_for_jane, None, None);
@@ -236,7 +246,18 @@ mod tests {
     fn test_workflow_feature_user_session() {
         let user_john = "John Doe";
         let password_for_john = "john";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
+
 
         // Do login
         let token = vault.login(user_john, password_for_john, None, None).ok().unwrap();
@@ -248,7 +269,7 @@ mod tests {
         let server = vault.resolve_server_token_from_client_authentication_token(user_john.as_bytes(), client_authentication_token).ok().unwrap();
 
         // Decode authentication token
-        let client = decode_client_token(vault.key_pairs().public_authentication_certificate().as_ref(), client_authentication_token).ok().unwrap();
+        let client = decode_client_token(vault.key_pairs().public_authentication_certificate(), client_authentication_token).ok().unwrap();
 
         // Validate the data on server is same as the data on client
         assert_eq!(server.client().unwrap(), client.buffer().unwrap());
@@ -258,7 +279,17 @@ mod tests {
     fn test_workflow_feature_authentication_token_refresh() {
         let user_john = "John Doe";
         let password_for_john = "john";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
 
         // Do login
         let token = vault.login(
@@ -306,7 +337,17 @@ mod tests {
     fn test_workflow_feature_user_logout() {
         let user_john = "John Doe";
         let password_for_john = "john";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
 
         // Do login
         let token = vault.login(
@@ -342,7 +383,15 @@ mod tests {
     fn test_security_feature_renew_not_possible_prior_to_login() {
         let user_john = "John Doe";
         let password_for_john = "john";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
         // Do login - To get a token
         let token = vault.login(
             user_john, password_for_john, None, None,
@@ -351,7 +400,15 @@ mod tests {
         let refresh_token = token.refresh_token();
 
         // Rew initialise vault to simulate stolen token
-        let mut vault = DefaultVault::new(generate_user_passwords());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
         let result = vault.renew(user_john.as_ref(), refresh_token, None);
         assert!(result.is_err());
     }
@@ -360,7 +417,15 @@ mod tests {
     fn test_security_feature_new_authentication_invalidates_old_authentication() {
         let user_john = "John Doe";
         let password_for_john = "john";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
 
         // Do login
         let token = vault.login(
@@ -398,7 +463,15 @@ mod tests {
     fn test_security_feature_new_refresh_invalidates_old_refresh() {
         let user_john = "John Doe";
         let password_for_john = "john";
-        let mut vault = DefaultVault::new(generate_user_passwords());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut vault = DefaultVault::new(generate_user_passwords(), vault);
 
         // Do login
         let token = vault.login(

@@ -60,7 +60,7 @@ pub trait UserAuthentication {
 }
 
 /// Will orchestrate the workflow
-pub trait Vault<H: Hasher>: KeyStore + UserIdentity + UserAuthentication + Persistence + PersistenceHasher<H> {
+pub trait Vault<H: Hasher, S: SigningKeys>: KeyStore<S> + UserIdentity + UserAuthentication + Persistence + PersistenceHasher<H> {
     /// Prepares Client Authentication Token
     /// Manages the Client Authentication Buffer
     fn prepare_user_authentication_token(&self, iss: &[u8], reference: u64, iat: i64, nbf: i64, exp: i64, buffer: Option<Vec<u8>>) -> Result<String, Error> {
@@ -265,8 +265,8 @@ pub trait Vault<H: Hasher>: KeyStore + UserIdentity + UserAuthentication + Persi
         let reference = claims.reference();
         let result = self.load(reference);
         if result.is_none() {
-            let msg= format!("logout unsuccessful for user: {:#?}", user);
-            let reason= "Authentication Token not found".to_string();
+            let msg = format!("logout unsuccessful for user: {:#?}", user);
+            let reason = "Authentication Token not found".to_string();
             return Err(InvalidClientAuthenticationToken(msg, reason).into());
         };
         self.remove(reference);
@@ -282,8 +282,8 @@ pub trait Vault<H: Hasher>: KeyStore + UserIdentity + UserAuthentication + Persi
 }
 
 
-impl<H, T> Vault<H> for T
-    where H: Hasher, T: KeyStore + UserIdentity + UserAuthentication + Persistence + PersistenceHasher<H>
+impl<H, T, S> Vault<H, S> for T
+    where H: Hasher, T: KeyStore<S> + UserIdentity + UserAuthentication + Persistence + PersistenceHasher<H>, S: SigningKeys + Clone
 {}
 
 
@@ -292,7 +292,6 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
-    use crate::utils::certificates::FromDisk;
     use crate::utils::token::{decode_client_token, decode_server_token};
     use std::default::Default;
     use std::thread;
@@ -304,28 +303,6 @@ mod tests {
         thread::sleep(duration)
     }
 
-    fn generate_key_pairs() -> KeyPairs {
-        let disk = FromDisk;
-
-        let public_certificate_path = "store/public_authentication_token.pem";
-        let private_certificate_path = "store/private_authentication_token.pem";
-
-        let public_certificate = disk.load_public_certificate(public_certificate_path).ok().unwrap();
-        let private_certificate = disk.load_private_certificate(private_certificate_path).ok().unwrap();
-
-        let authentication = AuthenticationKeyPair::new(public_certificate, private_certificate);
-
-        let public_certificate_path = "store/public_refresh_token.pem";
-        let private_certificate_path = "store/private_refresh_token.pem";
-
-        let public_certificate = disk.load_public_certificate(public_certificate_path).ok().unwrap();
-        let private_certificate = disk.load_private_certificate(private_certificate_path).ok().unwrap();
-
-        let refresh = RefreshKeyPair::new(public_certificate, private_certificate);
-
-        KeyPairs::new(authentication, refresh)
-    }
-
 
     fn generate_users() -> HashMap<String, String> {
         let mut users = HashMap::new();
@@ -334,17 +311,16 @@ mod tests {
         users
     }
 
-    struct VaultManager {
+    struct VaultManager<S: SigningKeys> {
         pub users: HashMap<String, String>,
         pub bank: HashMap<u64, String>,
-        pub key_pairs: KeyPairs,
+        pub key_pairs: S,
 
     }
 
-    impl VaultManager {
-        pub fn new(users: HashMap<String, String>, key_pairs: KeyPairs) -> Self {
+    impl<S: SigningKeys> VaultManager<S> {
+        pub fn new(users: HashMap<String, String>, key_pairs: S) -> Self {
             let bank = HashMap::new();
-
 
             Self {
                 users,
@@ -355,13 +331,13 @@ mod tests {
         }
     }
 
-    impl PersistenceHasher<DefaultHasher> for VaultManager {
+    impl<S: SigningKeys> PersistenceHasher<DefaultHasher> for VaultManager<S> {
         fn engine(&self) -> DefaultHasher {
             DefaultHasher::default()
         }
     }
 
-    impl Persistence for VaultManager {
+    impl<S: SigningKeys> Persistence for VaultManager<S> {
         fn store(&mut self, key: u64, value: String) {
             self.bank.insert(key, value);
         }
@@ -373,13 +349,13 @@ mod tests {
         }
     }
 
-    impl KeyStore for VaultManager {
-        fn key_pairs(&self) -> &KeyPairs {
+    impl<S: SigningKeys> KeyStore<S> for VaultManager<S> {
+        fn key_pairs(&self) -> &S {
             &self.key_pairs
         }
     }
 
-    impl UserAuthentication for VaultManager {
+    impl<S: SigningKeys> UserAuthentication for VaultManager<S> {
         fn check_user_valid<T: AsRef<[u8]>>(&mut self, user: T, pass: T) -> Result<Option<Session>, Error> {
             let user = String::from_utf8_lossy(user.as_ref()).to_string();
             let pass = String::from_utf8_lossy(pass.as_ref()).to_string();
@@ -407,7 +383,7 @@ mod tests {
         }
     }
 
-    impl UserIdentity for VaultManager {
+    impl<S: SigningKeys> UserIdentity for VaultManager<S> {
         fn check_same_user<T: AsRef<[u8]>>(&self, user: T, user_from_token: T) -> Result<(), Error> {
             if user_from_token.as_ref() != user.as_ref() {
                 //TODO: Maybe monitor this
@@ -419,10 +395,6 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_default_key_pair() {
-        assert_eq!(generate_key_pairs(), KeyPairs::default());
-    }
 
     #[test]
     fn test_user_login() {
@@ -432,7 +404,16 @@ mod tests {
         let expected_auth_buffer = format!("Client:{}", user);
         let expected_server_buffer = format!("Server:{}", user);
 
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let result = manager.login(user.as_bytes(), password.as_bytes(), None, None).ok().unwrap();
 
@@ -538,7 +519,15 @@ mod tests {
 
     #[test]
     fn test_user_access_not_allowed_post_authentication_token_exp_until_renewed() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -598,7 +587,15 @@ mod tests {
 
     #[test]
     fn test_user_logout() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -634,7 +631,15 @@ mod tests {
 
     #[test]
     fn test_user_revocation() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -670,7 +675,15 @@ mod tests {
 
     #[test]
     fn test_user_cross_token_access_not_allowed() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -717,7 +730,15 @@ mod tests {
 
     #[test]
     fn test_new_client_refresh_token_invalidates_old_token() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -752,7 +773,15 @@ mod tests {
 
     #[test]
     fn test_same_user_constraint() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -767,7 +796,15 @@ mod tests {
 
     #[test]
     fn test_renewal_allowed_for_logged_in_users() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -793,7 +830,15 @@ mod tests {
 
     #[test]
     fn test_check_user_valid() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user = "John Doe".as_bytes().to_vec();
         let password = vec![0xffu8];
@@ -816,9 +861,18 @@ mod tests {
         );
         assert!(token_for_john.is_err());
     }
+
     #[test]
     fn test_multiple_logout_not_allowed() {
-        let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
+        let keys = RSAKeys::default();
+        let vault = KeyVault::new(
+            keys.public_authentication(),
+            keys.private_authentication(),
+            keys.public_refresh(),
+            keys.private_refresh(),
+        );
+
+        let mut manager = VaultManager::new(generate_users(), vault);
 
         let user_john = "John Doe";
         let password_for_john = "john";
@@ -832,8 +886,6 @@ mod tests {
 
         let result = manager.logout(user_john.as_bytes(), token_for_john.authentication_token());
         assert!(result.is_err());
-
     }
-
 }
 

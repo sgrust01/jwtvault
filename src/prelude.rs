@@ -5,7 +5,7 @@ pub use crate::api::components::{Persistence, PersistenceHasher, KeyStore};
 pub use crate::errors::CertificateError::{BadFile, FileReadError};
 pub use crate::errors::LoginFailed::{InvalidTokenOwner, InvalidPassword, MissingPassword};
 pub use crate::errors::TokenErrors::{InvalidServerRefreshToken, MissingServerRefreshToken, TokenDecodingFailed, TokenEncodingFailed, InvalidClientAuthenticationToken};
-pub use crate::utils::certificates::{FromDisk, KeyVault, Keys, KeyPaths};
+pub use crate::utils::certificates::{FromDisk, KeyVault, Keys, KeyPaths, RSAKeys};
 pub use crate::constants::{DEFAULT_AUTHENTICATION_MAX_EXPIRY_IN_SECONDS,
                            DEFAULT_AUTHENTICATION_MIN_EXPIRY_IN_SECONDS,
                            DEFAULT_REFRESH_WITH_NO_EXPIRY,

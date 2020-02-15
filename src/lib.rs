@@ -37,8 +37,17 @@
 //!    users.insert(user_john.to_string(), password_for_john.to_string());
 //!    users.insert(user_jane.to_string(), password_for_jane.to_string());
 //!
+//!    // Prepare the vault panic if something breaks
+//!    let keys = RSAKeys::default();
+//!    let vault = KeyVault::new(
+//!        keys.public_authentication(),
+//!        keys.private_authentication(),
+//!        keys.public_refresh(),
+//!        keys.private_refresh()
+//!    );
+//!
 //!    // Initialize vault
-//!    let mut vault = DefaultVault::new(users);
+//!    let mut vault = DefaultVault::new(users, vault);
 //!
 //!    // John needs to login now
 //!    let token = vault.login(
