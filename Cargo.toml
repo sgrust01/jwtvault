@@ -1,6 +1,6 @@
 [package]
 name = "jwtvault"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Saurav Gupta <sgrust01@gmail.com>"]
 description = """
 Highly flexible library to manage and orchestrate JWT workflow
@@ -8,9 +8,9 @@ Highly flexible library to manage and orchestrate JWT workflow
 repository = "https://github.com/sgrust01/jwtvault.git"
 edition = "2018"
 publish = true
-keywords = ["jwt","JSON Web Token", "session", "management", "security"]
+keywords = ["jwt","JSONWebToken", "session", "management", "security"]
 license = "MIT"
-categories = ["Authentication", "Web programming"]
+categories = ["authentication", "web-programming"]
 
 [dependencies]
 failure = "0.1.6"
