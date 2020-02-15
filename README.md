@@ -7,6 +7,9 @@
 [![codecov](https://codecov.io/gh/sgrust01/jwtvault/branch/master/graph/badge.svg)](https://codecov.io/gh/sgrust01/jwtvault)
 [![Version](https://img.shields.io/badge/rustc-1.39+-blue.svg)](https://blog.rust-lang.org/2019/11/07/Rust-1.39.0.html) 
 ![RepoSize](https://img.shields.io/github/repo-size/sgrust01/jwtvault)
+![Crates.io](https://img.shields.io/crates/l/jwtvault)
+![Crates.io](https://img.shields.io/crates/v/jwtvault)
+![Crates.io](https://img.shields.io/crates/d/jwtvault)
 ![Contributors](https://img.shields.io/github/contributors/sgrust01/jwtvault)
 </p>
 
@@ -39,13 +42,13 @@
 
 Dependencies:
 
-```shell script
-./generate_certificates.sh
-```
-
 ```toml
 [dependencies]
 jwtvault = "*"
+```
+
+```shell script
+./generate_certificates.sh
 ```
 
 
