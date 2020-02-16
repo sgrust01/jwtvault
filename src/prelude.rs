@@ -16,7 +16,7 @@ pub use crate::constants::{DEFAULT_AUTHENTICATION_MAX_EXPIRY_IN_SECONDS,
 
 pub use failure::Error;
 pub use crate::utils::token::{encode_client_token, decode_client_token, encode_server_token, decode_server_token, ServerClaims};
-pub use crate::utils::helpers::{compute_timestamp_in_seconds, compute_authentication_token_expiry, compute_refresh_token_expiry};
+pub use crate::utils::helpers::{compute_timestamp_in_seconds, compute_authentication_token_expiry, compute_refresh_token_expiry, digest};
 pub use crate::plugins::stores::inmemory::{DefaultVault, MemoryVault};
 pub use crate::plugins::hashers::default::{MemoryHasher};
 

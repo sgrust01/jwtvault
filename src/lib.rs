@@ -23,7 +23,8 @@
 //! use std::collections::HashMap;
 //!
 //! fn main() {
-//!     let mut users = HashMap::new();
+//!     use std::collections::hash_map::DefaultHasher;
+//! let mut users = HashMap::new();
 //!
 //!     // User: John Doe
 //!    let user_john = "John Doe";
@@ -62,11 +63,17 @@
 //!    // which is send to client
 //!    let data_from_server_side = server_refresh_token.client().unwrap();
 //!
+//!    let client_session = format!("ClientSide: {}", user_john);
+//!    let server_session = format!("ServerSide: {}", user_john);
+//!
+//!    let client_session = digest(&mut DefaultHasher::default(), client_session.as_bytes());
+//!    let server_session = digest(&mut DefaultHasher::default(), server_session.as_bytes());
+//!
 //!    // Check out the data on client and server which are public and private respectively
 //!    println!(" [Public] John Info: {}",
-//!             String::from_utf8_lossy(data_from_server_side.as_slice()).to_string());
+//!             String::from_utf8_lossy(data_from_server_side.get(&client_session).unwrap().as_slice()).to_string());
 //!    println!("[Private] John Info: {}",
-//!             String::from_utf8_lossy(private_info_about_john.as_slice()).to_string());
+//!             String::from_utf8_lossy(private_info_about_john.get(&server_session).unwrap().as_slice()).to_string());
 //!
 //!    // lets renew authentication token
 //!    let new_token = vault.renew(

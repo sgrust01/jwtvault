@@ -108,9 +108,25 @@ impl<H: Hasher + Default> UserAuthentication for MemoryVault<H> {
         };
 
         let mut rng = rand::thread_rng();
+
+        let client = format!("ClientSide: {}", rng.gen_range(1, 1000));
+        let mut client_sessions = HashMap::new();
+        client_sessions.insert(
+            digest(&mut self.engine(), client.as_bytes()),
+            client.into_bytes()
+        );
+
+        let server = format!("ServerSide: {}", rng.gen_range(1000, 100000));
+        let mut server_sessions = HashMap::new();
+        server_sessions.insert(
+            digest(&mut self.engine(), server.as_bytes()),
+            server.into_bytes()
+        );
+
+
         let session = Session::new(
-            Some(format!("ClientSide: {}", rng.gen_range(1, 1000)).into_bytes()),
-            Some(format!("ServerSide: {}", rng.gen_range(1000, 100000)).into_bytes()),
+            Some(client_sessions),
+            Some(server_sessions),
         );
 
         Ok(Some(session))
@@ -171,20 +187,38 @@ impl DefaultVault {
 impl UserAuthentication for DefaultVault {
     /// Return normally if login succeeds else return an Error
     fn check_user_valid<T: AsRef<[u8]>>(&mut self, user: T, pass: T) -> Result<Option<Session>, Error> {
-        let user = String::from_utf8(user.as_ref().to_vec())?;
-        let password = self.user_passwords.get(&user);
+        let user_id = String::from_utf8(user.as_ref().to_vec())?;
+        let password = self.user_passwords.get(&user_id);
         if password.is_none() {
-            return Err(MissingPassword(user, "No password".to_string()).into());
+            return Err(MissingPassword(user_id, "No password".to_string()).into());
         };
         let password = password.unwrap().as_bytes();
         if password != pass.as_ref() {
-            return Err(InvalidPassword(user, "Password does not match".to_string()).into());
+            return Err(InvalidPassword(user_id, "Password does not match".to_string()).into());
         };
 
-        let mut rng = rand::thread_rng();
+
+        let client = format!("ClientSide: {}", user_id);
+        let client_key = digest(&mut self.engine(), client.as_bytes());
+        let mut client_sessions = HashMap::new();
+        client_sessions.insert(
+            client_key,
+            client.as_bytes().to_vec()
+        );
+
+        let server = format!("ServerSide: {}", user_id);
+        let server_key = digest(&mut self.engine(), server.as_bytes());
+        let mut server_sessions = HashMap::new();
+        server_sessions.insert(
+            server_key,
+            server.as_bytes().to_vec()
+        );
+
+
+
         let session = Session::new(
-            Some(format!("{}", rng.gen_range(1, 1000)).into_bytes()),
-            Some(format!("{}", rng.gen_range(1000, 100000)).into_bytes()),
+            Some(client_sessions),
+            Some(server_sessions),
         );
 
         Ok(Some(session))
