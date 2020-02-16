@@ -8,9 +8,9 @@ pub const DEFAULT_AUTHENTICATION_MIN_EXPIRY_IN_SECONDS: i64 = 800;
 pub const DEFAULT_REFRESH_WITH_NO_EXPIRY: i64 = i64::MAX;
 
 
-pub const DEFAULT_PUBLIC_AUTHENTICATION_TOKEN_PATH: &str = "store/public_authentication_token.der";
-pub const DEFAULT_PRIVATE_AUTHENTICATION_TOKEN_PATH: &str = "store/private_authentication_token.der";
+pub const DEFAULT_PUBLIC_AUTHENTICATION_TOKEN_PATH: &str = "store/public_authentication_token.pem";
+pub const DEFAULT_PRIVATE_AUTHENTICATION_TOKEN_PATH: &str = "store/private_authentication_token.pem";
 
-pub const DEFAULT_PUBLIC_REFRESH_TOKEN_PATH: &str = "store/public_refresh_token.der";
-pub const DEFAULT_PRIVATE_REFRESH_TOKEN_PATH: &str = "store/private_refresh_token.der";
+pub const DEFAULT_PUBLIC_REFRESH_TOKEN_PATH: &str = "store/public_refresh_token.pem";
+pub const DEFAULT_PRIVATE_REFRESH_TOKEN_PATH: &str = "store/private_refresh_token.pem";
 
