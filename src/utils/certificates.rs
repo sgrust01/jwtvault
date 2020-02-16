@@ -104,6 +104,30 @@ mod tests {
         z.to_string()
     }
 
+    #[test]
+    fn validate_round_trip() {
+        let keys = KeyPairs::default();
+        let user = "user";
+        let _ref = 1u64;
+        let token = encode_client_token(
+            keys.private_authentication_certificate(),
+            user.as_bytes(),
+            None,
+            _ref,
+            None,
+            None,
+            None
+        );
+        let token = token.ok().unwrap();
+        let computed = decode_client_token(
+            keys.public_authentication_certificate(),
+            token.as_ref()
+        );
+        let computed = computed.ok().unwrap();
+        assert_eq!(computed.reference(), _ref);
+        assert_eq!(computed.sub().as_slice(), user.as_bytes());
+    }
+
 
     #[test]
     fn missing_certificates() {

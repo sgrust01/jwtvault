@@ -307,16 +307,16 @@ mod tests {
     fn generate_key_pairs() -> KeyPairs {
         let disk = FromDisk;
 
-        let public_certificate_path = "store/public_authentication_token.der";
-        let private_certificate_path = "store/private_authentication_token.der";
+        let public_certificate_path = "store/public_authentication_token.pem";
+        let private_certificate_path = "store/private_authentication_token.pem";
 
         let public_certificate = disk.load_public_certificate(public_certificate_path).ok().unwrap();
         let private_certificate = disk.load_private_certificate(private_certificate_path).ok().unwrap();
 
         let authentication = AuthenticationKeyPair::new(public_certificate, private_certificate);
 
-        let public_certificate_path = "store/public_refresh_token.der";
-        let private_certificate_path = "store/private_refresh_token.der";
+        let public_certificate_path = "store/public_refresh_token.pem";
+        let private_certificate_path = "store/private_refresh_token.pem";
 
         let public_certificate = disk.load_public_certificate(public_certificate_path).ok().unwrap();
         let private_certificate = disk.load_private_certificate(private_certificate_path).ok().unwrap();

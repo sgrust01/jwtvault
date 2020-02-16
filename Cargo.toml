@@ -14,7 +14,7 @@ categories = ["authentication", "web-programming"]
 
 [dependencies]
 failure = "0.1.6"
-jsonwebtoken = "6.0.1"
+jsonwebtoken = "7.0.1"
 serde = { version = "1.0", features = ["derive"] }
 chrono = "0.4"
 rand="0.7.3"

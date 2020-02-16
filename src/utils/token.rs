@@ -1,4 +1,4 @@
-use jsonwebtoken::{encode, decode, Header, Algorithm, Validation};
+use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, DecodingKey, EncodingKey};
 
 use failure::Error;
 
@@ -62,7 +62,13 @@ impl ClientClaims {
 pub fn encode_client_token(private_certificate: &[u8], user_id: &[u8], _buf: Option<Vec<u8>>, _ref: u64, exp: Option<i64>, nbf: Option<i64>, iat: Option<i64>) -> Result<String, Error> {
     let header = Header::new(Algorithm::RS256);
     let claims = ClientClaims::new(user_id.to_vec(), _buf, _ref, exp, nbf, iat);
-    let token = encode(&header, &claims, private_certificate);
+    let key = EncodingKey::from_rsa_pem(private_certificate);
+    if key.is_err() {
+        let msg = key.err().unwrap().to_string();
+        return Err(TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
+    };
+    let key = key.unwrap();
+    let token = encode(&header, &claims, &key);
     if token.is_err() {
         let msg = token.err().unwrap().to_string();
         return Err(TokenEncodingFailed("Unable to decode token".to_string(), msg).into());
@@ -73,7 +79,14 @@ pub fn encode_client_token(private_certificate: &[u8], user_id: &[u8], _buf: Opt
 
 pub fn decode_client_token(public_certificate: &[u8], token: &str) -> Result<ClientClaims, Error> {
     let validation = Validation::new(Algorithm::RS256);
-    let result = decode::<ClientClaims>(token, public_certificate, &validation);
+    let key = DecodingKey::from_rsa_pem(public_certificate);
+    if key.is_err() {
+        let msg = key.err().unwrap().to_string();
+        return Err(TokenDecodingFailed("Unable to encode token".to_string(), msg).into());
+    };
+    let key = key.unwrap();
+
+    let result = decode::<ClientClaims>(token, &key, &validation);
     if result.is_err() {
         let msg = result.err().unwrap().to_string();
         return Err(TokenDecodingFailed("Unable to decode token".to_string(), msg).into());
@@ -145,10 +158,16 @@ impl ServerClaims {
 pub fn encode_server_token(private_certificate: &[u8], user_id: &[u8], _client: Option<Vec<u8>>, _server: Option<Vec<u8>>, _ref: u64, exp: Option<i64>, nbf: Option<i64>, iat: Option<i64>) -> Result<String, Error> {
     let header = Header::new(Algorithm::RS256);
     let claims = ServerClaims::new(user_id.to_vec(), _client, _server, _ref, exp, nbf, iat);
-    let token = encode(&header, &claims, private_certificate);
+    let key = EncodingKey::from_rsa_pem(private_certificate);
+    if key.is_err() {
+        let msg = key.err().unwrap().to_string();
+        return Err(TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
+    };
+    let key = key.unwrap();
+    let token = encode(&header, &claims, &key);
     if token.is_err() {
         let msg = token.err().unwrap().to_string();
-        return Err(TokenEncodingFailed("Unable to decode token".to_string(), msg).into());
+        return Err(TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
     };
     let token = token.ok().unwrap();
     Ok(token)
@@ -156,7 +175,13 @@ pub fn encode_server_token(private_certificate: &[u8], user_id: &[u8], _client: 
 
 pub fn decode_server_token(public_certificate: &[u8], token: &str) -> Result<ServerClaims, Error> {
     let validation = Validation::new(Algorithm::RS256);
-    let result = decode::<ServerClaims>(token, public_certificate, &validation);
+    let key = DecodingKey::from_rsa_pem(public_certificate);
+    if key.is_err() {
+        let msg = key.err().unwrap().to_string();
+        return Err(TokenDecodingFailed("Unable to encode token".to_string(), msg).into());
+    };
+    let key = key.unwrap();
+    let result = decode::<ServerClaims>(token, &key, &validation);
     if result.is_err() {
         let msg = result.err().unwrap().to_string();
         return Err(TokenDecodingFailed("Unable to decode token".to_string(), msg).into());
