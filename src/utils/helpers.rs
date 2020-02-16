@@ -1,7 +1,7 @@
 /// Module
 use rand::Rng;
 use chrono::Utc;
-
+use std::hash::Hasher;
 use crate::prelude::*;
 
 /// Compute time since epoch in seconds
@@ -43,10 +43,17 @@ pub fn compute_refresh_token_expiry(since_epoch_in_seconds: Option<i64>, expiry_
     }
 }
 
+pub fn digest<H: Hasher, T: AsRef<[u8]>>(hasher: &mut H, payload: T) -> u64 {
+    for i in payload.as_ref() {
+        hasher.write_u8(*i);
+    };
+    hasher.finish()
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::hash_map::DefaultHasher;
 
     #[test]
     fn validate_compute_authentication_token_expiry() {
@@ -54,6 +61,7 @@ mod tests {
         let exp = compute_authentication_token_expiry(None, None);
         assert!(exp > iat);
     }
+
     #[test]
     fn validate_compute_refresh_token_expiry() {
         let iat = compute_timestamp_in_seconds();
@@ -61,4 +69,24 @@ mod tests {
         assert!(exp > iat);
     }
 
+    #[test]
+    fn validate_digest() {
+        let mut hasher = DefaultHasher::default();
+        let data = "data";
+        let run1 = digest(&mut hasher, data.as_bytes());
+        let mut hasher = DefaultHasher::default();
+        let data = "data";
+        let run2 = digest(&mut hasher, data.as_bytes());
+        assert_eq!(run1, run2);
+
+        let mut hasher = DefaultHasher::default();
+        let data = "data";
+        let run3 = digest(&mut hasher, data.as_bytes());
+        assert_eq!(run1, run3);
+
+        let mut hasher = DefaultHasher::default();
+        let data = "data";
+        let run4 = digest(&mut hasher, data.as_bytes());
+        assert_eq!(run1, run4);
+    }
 }

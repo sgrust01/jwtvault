@@ -45,6 +45,7 @@ use failure::Error;
 use std::hash::Hasher;
 
 use crate::prelude::*;
+use std::collections::HashMap;
 
 /// Implementation Required
 pub trait UserIdentity {
@@ -63,7 +64,7 @@ pub trait UserAuthentication {
 pub trait Vault<H: Hasher>: KeyStore + UserIdentity + UserAuthentication + Persistence + PersistenceHasher<H> {
     /// Prepares Client Authentication Token
     /// Manages the Client Authentication Buffer
-    fn prepare_user_authentication_token(&self, iss: &[u8], reference: u64, iat: i64, nbf: i64, exp: i64, buffer: Option<Vec<u8>>) -> Result<String, Error> {
+    fn prepare_user_authentication_token(&self, iss: &[u8], reference: u64, iat: i64, nbf: i64, exp: i64, buffer: Option<HashMap<u64, Vec<u8>>>) -> Result<String, Error> {
         let private_certificate = self.key_pairs().private_authentication_certificate();
         let token = encode_client_token(
             private_certificate, iss, buffer, reference, Some(exp), Some(nbf), Some(iat),
@@ -83,7 +84,7 @@ pub trait Vault<H: Hasher>: KeyStore + UserIdentity + UserAuthentication + Persi
     /// Prepares Server Refresh Token
     /// Manages the Client Authentication Buffer
     /// Manages the Server Refresh Buffer
-    fn prepare_server_refresh_token(&self, iss: &[u8], reference: u64, iat: i64, nbf: i64, exp: i64, client: Option<Vec<u8>>, server: Option<Vec<u8>>) -> Result<String, Error> {
+    fn prepare_server_refresh_token(&self, iss: &[u8], reference: u64, iat: i64, nbf: i64, exp: i64, client: Option<HashMap<u64, Vec<u8>>>, server: Option<HashMap<u64, Vec<u8>>>) -> Result<String, Error> {
         let private_certificate = self.key_pairs().private_refresh_certificate();
         let token = encode_server_token(
             private_certificate, iss, client, server, reference, Some(exp), Some(nbf), Some(iat),
@@ -265,8 +266,8 @@ pub trait Vault<H: Hasher>: KeyStore + UserIdentity + UserAuthentication + Persi
         let reference = claims.reference();
         let result = self.load(reference);
         if result.is_none() {
-            let msg= format!("logout unsuccessful for user: {:#?}", user);
-            let reason= "Authentication Token not found".to_string();
+            let msg = format!("logout unsuccessful for user: {:#?}", user);
+            let reason = "Authentication Token not found".to_string();
             return Err(InvalidClientAuthenticationToken(msg, reason).into());
         };
         self.remove(reference);
@@ -395,12 +396,24 @@ mod tests {
                 return Err(InvalidPassword(user, "Invalid password".to_string()).into());
             };
 
-            let client = Some(format!("Client:{}", user).into_bytes());
-            let server = Some(format!("Server:{}", user).into_bytes());
+            let client = format!("Client:{}", user);
+            let server = format!("Server:{}", user);
+
+            let mut client_sessions = HashMap::new();
+            client_sessions.insert(
+                digest(&mut DefaultHasher::default(), "client".as_bytes()),
+                client.as_bytes().to_vec()
+            );
+
+            let mut server_sessions = HashMap::new();
+            server_sessions.insert(
+                digest(&mut DefaultHasher::default(), "server".as_bytes()),
+                server.as_bytes().to_vec()
+            );
 
             let session = Some(Session::new(
-                client,
-                server,
+                Some(client_sessions),
+                Some(server_sessions),
             ));
 
             Ok(session)
@@ -474,8 +487,13 @@ mod tests {
 
         assert_eq!(nbf, iat);
 
-        let client = String::from_utf8(authentication_token.buffer().unwrap().clone()).unwrap();
-        assert_eq!(client, expected_auth_buffer);
+        let client = authentication_token.buffer().unwrap().clone();
+        let mut expected = HashMap::new();
+        expected.insert(
+            digest(&mut DefaultHasher::default(), "client".as_bytes()),
+            expected_auth_buffer.as_bytes().to_vec()
+        );
+        assert_eq!(client, expected);
 
         // #######################
         // Validate: Refresh Token
@@ -509,7 +527,12 @@ mod tests {
         // Validate client authentication and server refresh token have same references
         assert_eq!(session.reference(), authentication_token.reference());
         // Validate client authentication and expected buffer are same
-        assert_eq!(*session.server().unwrap(), expected_server_buffer.clone().into_bytes());
+        let mut server_session = HashMap::new();
+        server_session.insert(
+            digest(&mut DefaultHasher::default(), "server".as_bytes()),
+            expected_server_buffer.as_bytes().to_vec()
+        );
+        assert_eq!(*session.server().unwrap(), server_session);
         // Validate client authentication and server client buffer are same
         assert_eq!(*session.client().unwrap(), *authentication_token.buffer().unwrap());
 
@@ -530,7 +553,12 @@ mod tests {
         // Validate client refresh and server refresh token have same references
         assert_eq!(session.reference(), refresh_token.reference());
         // Validate client authentication and expected buffer are same
-        assert_eq!(*session.server().unwrap(), expected_server_buffer.clone().into_bytes());
+        let mut server_session = HashMap::new();
+        server_session.insert(
+            digest(&mut DefaultHasher::default(), "server".as_bytes()),
+            expected_server_buffer.as_bytes().to_vec()
+        );
+        assert_eq!(*session.server().unwrap(), server_session);
         // Validate client authentication and server client buffer are same
         assert_eq!(*session.client().unwrap(), *authentication_token.buffer().unwrap());
     }
@@ -816,6 +844,7 @@ mod tests {
         );
         assert!(token_for_john.is_err());
     }
+
     #[test]
     fn test_multiple_logout_not_allowed() {
         let mut manager = VaultManager::new(generate_users(), generate_key_pairs());
@@ -832,8 +861,6 @@ mod tests {
 
         let result = manager.logout(user_john.as_bytes(), token_for_john.authentication_token());
         assert!(result.is_err());
-
     }
-
 }
 

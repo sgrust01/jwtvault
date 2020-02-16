@@ -47,6 +47,7 @@
 //!
 
 use std::ops::Deref;
+use std::collections::HashMap;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct AuthenticationToken(String);
@@ -136,12 +137,12 @@ impl From<(String, String)> for Token {
 /// server side
 #[derive(Clone, PartialEq, Debug)]
 pub struct Session {
-    pub client: Option<Vec<u8>>,
-    pub server: Option<Vec<u8>>,
+    pub client: Option<HashMap<u64, Vec<u8>>>,
+    pub server: Option<HashMap<u64, Vec<u8>>>,
 }
 
 impl Session {
-    pub fn new(client: Option<Vec<u8>>, server: Option<Vec<u8>>) -> Self {
+    pub fn new(client: Option<HashMap<u64, Vec<u8>>>, server: Option<HashMap<u64, Vec<u8>>>) -> Self {
         Self {
             client,
             server,
