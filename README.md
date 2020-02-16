@@ -47,6 +47,8 @@ Dependencies:
 jwtvault = "*"
 ```
 
+    curl https://raw.githubusercontent.com/sgrust01/jwtvault/master/generate_certificates.sh > ./generate_certificates.sh
+
 ```shell script
 ./generate_certificates.sh
 ```

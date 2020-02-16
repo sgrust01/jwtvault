@@ -1,6 +1,5 @@
 use std::fs::File;
 use std::io::Read;
-use std::convert::TryFrom;
 
 use failure::Error;
 use crate::prelude::*;
@@ -235,7 +234,6 @@ impl CertificateLoader<&str> for FromDisk {
 mod tests {
     use super::*;
     use std::process::Command;
-    use std::convert::TryFrom;
     use std::fs;
     use jsonwebtoken::{EncodingKey, DecodingKey};
     use std::ops::Deref;
@@ -272,7 +270,7 @@ mod tests {
 //                .output()
 //                .expect("failed to execute process")
 //        };
-        let loader = FromDisk;
+//        let loader = FromDisk;
 
         let public_authentication_certificate_path = format!("{}/{}", store, tail(DEFAULT_PUBLIC_AUTHENTICATION_TOKEN_PATH));
         let private_authentication_certificate_path = format!("{}/{}", store, tail(DEFAULT_PRIVATE_AUTHENTICATION_TOKEN_PATH));
