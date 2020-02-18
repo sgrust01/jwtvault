@@ -26,7 +26,6 @@ use std::hash::Hasher;
 
 use failure::Error;
 use crate::plugins::hashers::default::MemoryHasher;
-use std::collections::hash_map::DefaultHasher;
 
 /// # In-Memory Vault
 /// Structure
