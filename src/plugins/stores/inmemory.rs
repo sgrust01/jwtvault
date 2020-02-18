@@ -26,6 +26,7 @@ use std::hash::Hasher;
 
 use failure::Error;
 use crate::plugins::hashers::default::MemoryHasher;
+use std::collections::hash_map::DefaultHasher;
 
 /// # In-Memory Vault
 /// Structure
@@ -92,47 +93,9 @@ impl<H: Hasher + Default> PersistenceHasher<H> for MemoryVault<H> {
     }
 }
 
-/// Default Implementation
-impl<H: Hasher + Default> UserAuthentication for MemoryVault<H> {
-    /// Return normally if login succeeds else return an Error
-    fn check_user_valid<T: AsRef<[u8]>>(&mut self, user: T, pass: T) -> Result<Option<Session>, Error> {
-        let user_id = String::from_utf8(user.as_ref().to_vec())?;
-        let password = self.user_passwords.get(&user_id);
-        if password.is_none() {
-            return Err(MissingPassword(user_id, "No password".to_string()).into());
-        };
-        let password = password.unwrap().as_bytes();
-        if password != pass.as_ref() {
-            return Err(InvalidPassword(user_id, "Password does not match".to_string()).into());
-        };
-
-        let client = format!("ClientSide: {}", user_id);
-        let client_key = digest(&mut self.engine(), client.as_bytes());
-
-        let mut client_sessions = HashMap::new();
-        client_sessions.insert(
-            client_key,
-            client.into_bytes(),
-        );
-
-        let server = format!("ServerSide: {}", user_id);
-        let server_key = digest(&mut self.engine(), server.as_bytes());
-
-        let mut server_sessions = HashMap::new();
-        server_sessions.insert(
-            server_key,
-            server.into_bytes(),
-        );
-
-
-        let session = Session::new(
-            Some(client_sessions),
-            Some(server_sessions),
-        );
-
-        Ok(Some(session))
-    }
-}
+// Un-Implemented
+//impl<H: Hasher + Default> UserAuthentication for MemoryVault<H> {
+//}
 
 /// Default Implementation
 impl<H: Hasher + Default> Persistence for MemoryVault<H> {
@@ -184,6 +147,26 @@ impl DefaultVault {
 }
 
 
+impl Persistence for DefaultVault {
+    fn store(&mut self, key: u64, value: String) {
+        self.0.store(key, value)
+    }
+
+    fn load(&self, key: u64) -> Option<&String> {
+        self.0.load(key)
+    }
+
+    fn remove(&mut self, key: u64) -> Option<String> {
+        self.0.remove(key)
+    }
+}
+
+impl PersistenceHasher<MemoryHasher> for DefaultVault {
+    fn engine(&self) -> MemoryHasher {
+        self.0.engine()
+    }
+}
+
 /// Default Implementation
 impl UserAuthentication for DefaultVault {
     /// Return normally if login succeeds else return an Error
@@ -222,6 +205,19 @@ impl UserAuthentication for DefaultVault {
         );
 
         Ok(Some(session))
+    }
+}
+
+
+impl UserIdentity for DefaultVault {
+    fn check_same_user<T: AsRef<[u8]>>(&self, user: T, user_from_token: T) -> Result<(), Error> {
+        self.0.check_same_user(user, user_from_token)
+    }
+}
+
+impl KeyStore for DefaultVault {
+    fn key_pairs(&self) -> &KeyPairs {
+        self.0.key_pairs()
     }
 }
 
