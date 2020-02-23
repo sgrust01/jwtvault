@@ -5,6 +5,7 @@ authors = ["Saurav Gupta <sgrust01@gmail.com>"]
 description = """
 Highly flexible library to manage and orchestrate JWT workflow
 """
+documentation = "https://docs.rs/jwtvault"
 repository = "https://github.com/sgrust01/jwtvault.git"
 edition = "2018"
 publish = true
