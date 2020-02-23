@@ -4,6 +4,8 @@ use std::io::Read;
 use rand::Rng;
 use chrono::Utc;
 use std::hash::Hasher;
+use futures::executor::LocalPool;
+use futures::Future;
 use crate::prelude::*;
 
 pub fn load_file_from_disk(path: &str) -> Result<Vec<u8>, Error>
@@ -20,7 +22,6 @@ pub fn load_file_from_disk(path: &str) -> Result<Vec<u8>, Error>
     result?;
     Ok(data)
 }
-
 
 
 /// Compute time since epoch in seconds
@@ -67,6 +68,12 @@ pub fn digest<H: Hasher, T: AsRef<[u8]>>(hasher: &mut H, payload: T) -> u64 {
         hasher.write_u8(*i);
     };
     hasher.finish()
+}
+
+
+pub fn block_on<F: Future>(f: F) -> F::Output {
+    let mut pool = LocalPool::new();
+    pool.run_until(f)
 }
 
 #[cfg(test)]
