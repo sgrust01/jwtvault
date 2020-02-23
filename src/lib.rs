@@ -34,7 +34,6 @@
 //! use jwtvault::prelude::*;
 //! use std::collections::HashMap;
 //! use std::collections::hash_map::DefaultHasher;
-//! use futures::executor::block_on;
 //!
 //! fn main() {
 //!     let mut users = HashMap::new();
