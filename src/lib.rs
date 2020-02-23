@@ -58,8 +58,8 @@
 //!
 //!    // John needs to login now
 //!    let token = block_on(vault.login(
-//!        user_john.as_bytes(),
-//!        password_for_john.as_bytes(),
+//!        user_john,
+//!        password_for_john,
 //!        None,
 //!        None,
 //!    ));
@@ -67,7 +67,7 @@
 //!    // When John presents authentication token, it can be used to restore John's session info
 //!    let server_refresh_token = block_on(resolve_session_from_client_authentication_token(
 //!        &mut vault,
-//!        user_john.as_bytes(),
+//!        user_john,
 //!        token.authentication(),
 //!    ));
 //!    let server_refresh_token = server_refresh_token.ok().unwrap();
@@ -88,7 +88,7 @@
 //!
 //!    // lets renew authentication token
 //!    let new_token = block_on(vault.renew(
-//!        user_john.as_bytes(),
+//!        user_john,
 //!        token.refresh(),
 //!        None,
 //!    ));
@@ -97,7 +97,7 @@
 //!    // When John presents new authentication token it can be used to restore session info
 //!    let result = block_on(resolve_session_from_client_authentication_token(
 //!        &mut vault,
-//!        user_john.as_bytes(),
+//!        user_john,
 //!        new_token.as_str(),
 //!    ));
 //!    let _ = result.ok().unwrap();

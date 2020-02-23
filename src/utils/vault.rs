@@ -74,7 +74,7 @@ impl Persistence for DefaultVault {
 
 #[async_trait]
 impl UserIdentity for DefaultVault {
-    async fn check_same_user(&self, user: &[u8], user_from_token: &[u8]) -> Result<(), Error> {
+    async fn check_same_user(&self, user: &str, user_from_token: &str) -> Result<(), Error> {
         if user != user_from_token {
             let msg = "Login Failed".to_string();
             let reason = "Invalid token".to_string();
@@ -86,9 +86,8 @@ impl UserIdentity for DefaultVault {
 
 #[async_trait]
 impl UserAuthentication for DefaultVault {
-    async fn check_user_valid(&mut self, user: &[u8], password: &[u8]) -> Result<Option<Session>, Error> {
-        let user = String::from_utf8_lossy(user).to_string();
-        let password_from_disk = self.users.get(&user);
+    async fn check_user_valid(&mut self, user: &str, password: &str) -> Result<Option<Session>, Error> {
+        let password_from_disk = self.users.get(&user.to_string());
         if password_from_disk.is_none() {
             let msg = "Login Failed".to_string();
             let reason = "Invalid userid/password".to_string();
@@ -96,14 +95,14 @@ impl UserAuthentication for DefaultVault {
         };
 
         let password_from_disk = password_from_disk.unwrap();
-        if password != password_from_disk.as_bytes() {
+        if password != password_from_disk.as_str() {
             let msg = "Login Failed".to_string();
             let reason = "Invalid userid/password".to_string();
             return Err(LoginFailed::InvalidPassword(msg, reason).into());
         };
         let reference = digest::<_, DefaultHasher>(user.as_bytes());
         let mut server = HashMap::new();
-        server.insert(reference, user.clone().into_bytes());
+        server.insert(reference, user.clone().as_bytes().to_vec());
         let session = Session::new(None, Some(server));
         Ok(Some(session))
     }
@@ -112,15 +111,15 @@ impl UserAuthentication for DefaultVault {
 
 #[async_trait]
 impl Workflow for DefaultVault {
-    async fn login(&mut self, user: &[u8], pass: &[u8], authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error> {
+    async fn login(&mut self, user: &str, pass: &str, authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error> {
         continue_login(self, user, pass, authentication_token_expiry_in_seconds, refresh_token_expiry_in_seconds).await
     }
 
-    async fn renew(&mut self, user: &[u8], client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error> {
+    async fn renew(&mut self, user: &str, client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error> {
         continue_renew(self, user, client_refresh_token, authentication_token_expiry_in_seconds).await
     }
 
-    async fn logout(&mut self, user: &[u8], client_authentication_token: &String) -> Result<(), Error> {
+    async fn logout(&mut self, user: &str, client_authentication_token: &String) -> Result<(), Error> {
         continue_logout(self, user, client_authentication_token).await
     }
 
@@ -158,8 +157,8 @@ mod tests {
 
         let result = block_on(
             vault.login(
-                user_john.as_bytes(),
-                password_for_john.as_bytes(),
+                user_john,
+                password_for_john,
                 None,
                 None)
         );
@@ -170,7 +169,7 @@ mod tests {
         assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
         let result = block_on(
             resolve_session_from_client_authentication_token(
-                &mut vault, user_john.as_bytes(), token.authentication(),
+                &mut vault, user_john, token.authentication(),
             )
         );
         let server_claims = result.ok().unwrap();
@@ -178,7 +177,7 @@ mod tests {
 
         let new_auth_token = block_on(
             vault.renew(
-                user_john.as_bytes(),
+                user_john,
                 token.refresh(),
                 None,
             )
@@ -190,7 +189,7 @@ mod tests {
 
         let result = block_on(
             resolve_session_from_client_authentication_token(
-                &mut vault, user_john.as_bytes(), &new_auth_token,
+                &mut vault, user_john, &new_auth_token,
             )
         ).ok().unwrap();
 
@@ -198,36 +197,36 @@ mod tests {
 
         let result = block_on(
             resolve_session_from_client_authentication_token(
-                &mut vault, user_john.as_bytes(), &token.authentication(),
+                &mut vault, user_john, &token.authentication(),
             )
         );
         assert!(result.is_err());
 
         let result = block_on(
             vault.logout(
-                user_john.as_bytes(), &new_auth_token,
+                user_john, &new_auth_token,
             )
         );
         assert!(result.is_ok());
 
         let result = block_on(
             resolve_session_from_client_authentication_token(
-                &mut vault, user_john.as_bytes(), &token.authentication(),
+                &mut vault, user_john, &token.authentication(),
             )
         );
         assert!(result.is_err());
 
         let result = block_on(
             resolve_session_from_client_authentication_token(
-                &mut vault, user_john.as_bytes(), &new_auth_token,
+                &mut vault, user_john, &new_auth_token,
             )
         );
         assert!(result.is_err());
 
         let token = block_on(
             vault.login(
-                user_john.as_bytes(),
-                password_for_john.as_bytes(),
+                user_john,
+                password_for_john,
                 None,
                 None)
         ).ok().unwrap();
@@ -238,25 +237,25 @@ mod tests {
         assert!(result.is_ok());
 
         let result = block_on(
-            vault.renew(user_john.as_bytes(), &token.refresh(), None)
+            vault.renew(user_john, &token.refresh(), None)
         );
         assert!(result.is_err());
 
         let result = block_on(
-            vault.renew(user_john.as_bytes(), &token.authentication(), None)
+            vault.renew(user_john, &token.authentication(), None)
         );
         assert!(result.is_err());
 
         let result = block_on(
             resolve_session_from_client_authentication_token(
-                &mut vault, user_john.as_bytes(), &token.authentication(),
+                &mut vault, user_john, &token.authentication(),
             )
         );
         assert!(result.is_err());
 
         let result = block_on(
             resolve_session_from_client_refresh_token(
-                &mut vault, user_john.as_bytes(), &token.refresh(),
+                &mut vault, user_john, &token.refresh(),
             )
         );
         assert!(result.is_err());

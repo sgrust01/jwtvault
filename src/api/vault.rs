@@ -6,7 +6,7 @@ use std::hash::Hasher;
 #[async_trait]
 pub trait UserIdentity {
     /// Implementation Required
-    async fn check_same_user(&self, user: &[u8], user_from_token: &[u8]) -> Result<(), Error>;
+    async fn check_same_user(&self, user: &str, user_from_token: &str) -> Result<(), Error>;
 }
 
 
@@ -14,25 +14,25 @@ pub trait UserIdentity {
 #[async_trait]
 pub trait UserAuthentication {
     /// Implementation Required
-    async fn check_user_valid(&mut self, user: &[u8], password: &[u8]) -> Result<Option<Session>, Error>;
+    async fn check_user_valid(&mut self, user: &str, password: &str) -> Result<Option<Session>, Error>;
 }
 
 /// Workflow for library user
 /// [DefaultVault](../../utils/vault/struct.DefaultVault.html)
 #[async_trait]
 pub trait Workflow {
-    async fn login(&mut self, user: &[u8], pass: &[u8], authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>;
-    async fn renew(&mut self, user: &[u8], client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error>;
-    async fn logout(&mut self, user: &[u8], client_authentication_token: &String) -> Result<(), Error>;
+    async fn login(&mut self, user: &str, pass: &str, authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>;
+    async fn renew(&mut self, user: &str, client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error>;
+    async fn logout(&mut self, user: &str, client_authentication_token: &String) -> Result<(), Error>;
     async fn revoke(&mut self, client_refresh_token: &String) -> Result<(), Error>;
 }
 
 
-pub async fn resolve_session_from_client_authentication_token<H, V>(vault: &mut V, user: &[u8], token: &str) -> Result<ServerClaims, Error>
+pub async fn resolve_session_from_client_authentication_token<H, V>(vault: &mut V, user: &str, token: &str) -> Result<ServerClaims, Error>
     where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
     let client_claims = decode_client_token(vault.public_authentication_certificate(), token)?;
-    let user_from_token = client_claims.sub();
-    let _ = vault.check_same_user(user, user_from_token.as_slice()).await?;
+    let user_from_token = String::from_utf8_lossy(client_claims.sub().as_slice()).to_string();
+    let _ = vault.check_same_user(user, user_from_token.as_str()).await?;
     let public_certificate = vault.public_authentication_certificate();
     let claims = decode_client_token(public_certificate, token)?;
 
@@ -45,7 +45,7 @@ pub async fn resolve_session_from_client_authentication_token<H, V>(vault: &mut 
     };
     let refresh_token_from_store = refresh_token_from_store.unwrap();
 
-    let digest_reference = resolve_authentication_reference::<_, H>(user.as_ref());
+    let digest_reference = resolve_authentication_reference::<_, H>(user.as_bytes());
     let authentication_token_from_store = vault.load(digest_reference).await;
     if let Some(expected) = authentication_token_from_store {
         let computed = format!("{}", digest::<_, H>(&token.as_bytes()));
@@ -62,10 +62,11 @@ pub async fn resolve_session_from_client_authentication_token<H, V>(vault: &mut 
     Ok(claims)
 }
 
-pub async fn resolve_session_from_client_refresh_token<H, V>(vault: &mut V, user: &[u8], client_refresh_token: &str) -> Result<ServerClaims, Error>
+pub async fn resolve_session_from_client_refresh_token<H, V>(vault: &mut V, user: &str, client_refresh_token: &str) -> Result<ServerClaims, Error>
     where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
     let claims = decode_client_token(vault.public_refresh_certificate(), client_refresh_token)?;
-    vault.check_same_user(user, claims.sub()).await?;
+    let user_from_token = String::from_utf8_lossy(claims.sub()).to_string();
+    vault.check_same_user(user, user_from_token.as_str()).await?;
     let reference = claims.reference();
     let token = vault.load(reference).await;
     if token.is_none() {
@@ -84,7 +85,7 @@ pub async fn resolve_session_from_client_refresh_token<H, V>(vault: &mut V, user
     Ok(server_claims)
 }
 
-pub async fn continue_login<H, V>(vault: &mut V, user: &[u8], pass: &[u8], refresh_token_expiry_in_seconds: Option<i64>, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+pub async fn continue_login<H, V>(vault: &mut V, user: &str, pass: &str, refresh_token_expiry_in_seconds: Option<i64>, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
     where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
     let session = vault.check_user_valid(user, pass).await?;
     let (client, server) = match session {
@@ -98,7 +99,7 @@ pub async fn continue_login<H, V>(vault: &mut V, user: &[u8], pass: &[u8], refre
     let nbf = iat;
 
     // Prepare: User reference
-    let reference = resolve_refresh_reference::<_, H>(user.as_ref());
+    let reference = resolve_refresh_reference::<_, H>(user.as_bytes());
 
 
     // Prepare: Server Token
@@ -117,7 +118,7 @@ pub async fn continue_login<H, V>(vault: &mut V, user: &[u8], pass: &[u8], refre
         vault.private_authentication_certificate(), user, reference, iat, nbf, exp, client.clone(),
     )?;
 
-    let digest_reference = resolve_authentication_reference::<_, H>(user.as_ref());
+    let digest_reference = resolve_authentication_reference::<_, H>(user.as_bytes());
     let digest_payload = format!("{}", digest::<_, H>(&client_authentication_token.as_bytes()));
 
     // This is used to invalided old authentication token
@@ -132,7 +133,7 @@ pub async fn continue_login<H, V>(vault: &mut V, user: &[u8], pass: &[u8], refre
     Ok(token)
 }
 
-pub async fn continue_renew<H, V>(vault: &mut V, user: &[u8], client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error>
+pub async fn continue_renew<H, V>(vault: &mut V, user: &str, client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error>
     where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
     let server_claims = resolve_session_from_client_refresh_token(vault, user, client_refresh_token).await?;
 
@@ -150,7 +151,7 @@ pub async fn continue_renew<H, V>(vault: &mut V, user: &[u8], client_refresh_tok
         vault.private_authentication_certificate(), user, reference, iat, nbf, exp, client,
     )?;
 
-    let digest_reference = resolve_authentication_reference::<_, H>(user.as_ref());
+    let digest_reference = resolve_authentication_reference::<_, H>(user.as_bytes());
     let digest_payload = format!("{}", digest::<_, H>(&authentication_token.as_bytes()));
 
 
@@ -160,18 +161,19 @@ pub async fn continue_renew<H, V>(vault: &mut V, user: &[u8], client_refresh_tok
         vault.store(digest_reference, digest_payload).await;
     } else {
         let msg = "Unable to perform renew since the user is not prior logged in".to_string();
-        let reason = format!("Token: {} User: {:?}", client_refresh_token, user.as_ref());
+        let reason = format!("Token: {} User: {:?}", client_refresh_token, user.as_bytes());
         return Err(LoginFailed::InvalidTokenOwner(msg, reason).into());
     };
     Ok(authentication_token)
 }
 
-pub async fn continue_logout<H, V>(vault: &mut V, user: &[u8], client_authentication_token: &String) -> Result<(), Error>
+pub async fn continue_logout<H, V>(vault: &mut V, user: &str, client_authentication_token: &String) -> Result<(), Error>
     where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
     let claims = decode_client_token(
         vault.public_authentication_certificate(), client_authentication_token,
     )?;
-    vault.check_same_user(user, claims.sub()).await?;
+    let user_from_token = String::from_utf8_lossy(claims.sub()).to_string();
+    vault.check_same_user(user, user_from_token.as_str()).await?;
     let reference = claims.reference();
     let result = vault.load(reference).await;
     if result.is_none() {
