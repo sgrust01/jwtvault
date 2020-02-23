@@ -1,8 +1,27 @@
-/// Module
+use std::fs::File;
+use failure::Error;
+use std::io::Read;
 use rand::Rng;
 use chrono::Utc;
 use std::hash::Hasher;
 use crate::prelude::*;
+
+pub fn load_file_from_disk(path: &str) -> Result<Vec<u8>, Error>
+{
+    let file: Result<File, Error> = File::open(path).map_err(|e| {
+        CertificateError::BadFile(format!("Path: {} bad/missing", path), e.to_string()).into()
+    });
+    let mut file = file?;
+
+    let mut data = Vec::new();
+    let result: Result<usize, Error> = file.read_to_end(&mut data).map_err(|e| {
+        CertificateError::FileReadError(format!("Unable to read path {}", path), e.to_string()).into()
+    });
+    result?;
+    Ok(data)
+}
+
+
 
 /// Compute time since epoch in seconds
 pub fn compute_timestamp_in_seconds() -> i64 {

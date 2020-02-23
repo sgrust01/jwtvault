@@ -1,95 +1,61 @@
-//! # Certificates Documentation
-//! ## [CertificateLoader](trait.CertificateLoader.html)
-//!
-use failure::Error;
+use std::ops::Deref;
 
-pub trait CertificateLoader<T> {
-    fn load_public_certificate(&self, input: T) -> Result<Vec<u8>, Error>;
-    fn load_private_certificate(&self, input: T) -> Result<Vec<u8>, Error>;
+#[derive(Debug, Clone, PartialEq)]
+pub struct PublicKey(String);
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrivateKey(String);
+
+pub trait Store {
+    fn public_authentication_certificate(&self) -> &PublicKey;
+    fn private_authentication_certificate(&self) -> &PrivateKey;
+    fn public_refresh_certificate(&self) -> &PublicKey;
+    fn private_refresh_certificate(&self) -> &PrivateKey;
 }
 
-/// To be used for generating Token (JWT)
-#[derive(Clone, PartialEq, Debug)]
-pub struct KeyPairs
-{
-    authentication: AuthenticationKeyPair,
-    refresh: RefreshKeyPair,
+pub trait Keys {
+    fn public_authentication_certificate(&self) -> PublicKey;
+    fn private_authentication_certificate(&self) -> PrivateKey;
+    fn public_refresh_certificate(&self) -> PublicKey;
+    fn private_refresh_certificate(&self) -> PrivateKey;
 }
 
-/// To be used for generating Authentication Token (JWT)
-#[derive(Clone, PartialEq, Debug)]
-pub struct AuthenticationKeyPair {
-    public_certificate: Vec<u8>,
-    private_certificate: Vec<u8>,
-}
+impl Deref for PrivateKey {
+    type Target = String;
 
-/// To be used for generating Refresh Token (JWT)
-#[derive(Clone, PartialEq, Debug)]
-pub struct RefreshKeyPair {
-    public_certificate: Vec<u8>,
-    private_certificate: Vec<u8>,
-}
-
-impl AuthenticationKeyPair {
-    pub fn new(public_certificate: Vec<u8>, private_certificate: Vec<u8>) -> Self {
-        Self {
-            public_certificate,
-            private_certificate,
-        }
-    }
-    pub fn public_certificate(&self) -> &[u8] {
-        self.public_certificate.as_slice()
-    }
-    pub fn private_certificate(&self) -> &[u8] {
-        self.private_certificate.as_slice()
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-impl RefreshKeyPair {
-    pub fn new(public_certificate: Vec<u8>, private_certificate: Vec<u8>) -> Self {
-        Self {
-            public_certificate,
-            private_certificate,
-        }
-    }
-    pub fn public_certificate(&self) -> &[u8] {
-        self.public_certificate.as_slice()
-    }
-    pub fn private_certificate(&self) -> &[u8] {
-        self.private_certificate.as_slice()
+impl Deref for PublicKey {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
-
-impl KeyPairs {
-    pub fn new(authentication: AuthenticationKeyPair, refresh: RefreshKeyPair) -> Self {
-        Self {
-            authentication,
-            refresh,
-        }
+impl From<String> for PublicKey {
+    fn from(data: String) -> Self {
+        PublicKey(data)
     }
+}
 
-    pub fn authentication_key_pair(&self) -> &AuthenticationKeyPair {
-        &self.authentication
+impl From<String> for PrivateKey {
+    fn from(data: String) -> Self {
+        PrivateKey(data)
     }
+}
 
-    pub fn refresh_key_pair(&self) -> &RefreshKeyPair {
-        &self.refresh
+impl Into<String> for PublicKey {
+    fn into(self) -> String {
+        self.0
     }
+}
 
-    pub fn public_authentication_certificate(&self) -> &[u8] {
-        self.authentication_key_pair().public_certificate()
-    }
-
-    pub fn private_authentication_certificate(&self) -> &[u8] {
-        self.authentication_key_pair().private_certificate()
-    }
-
-    pub fn public_refresh_certificate(&self) -> &[u8] {
-        self.refresh_key_pair().public_certificate()
-    }
-
-    pub fn private_refresh_certificate(&self) -> &[u8] {
-        self.refresh_key_pair().private_certificate()
+impl Into<String> for PrivateKey {
+    fn into(self) -> String {
+        self.0
     }
 }

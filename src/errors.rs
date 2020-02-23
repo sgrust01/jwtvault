@@ -8,7 +8,6 @@ pub enum CertificateError {
     FileReadError(String, String),
 }
 
-
 #[derive(Debug, Fail)]
 pub enum TokenErrors {
     #[fail(display = "{} - Reason: {}", 0, 1)]

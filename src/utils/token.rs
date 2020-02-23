@@ -1,11 +1,12 @@
+use std::collections::HashMap;
+
+use serde::Serialize;
+
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, DecodingKey, EncodingKey};
 
 use failure::Error;
 
-use crate::utils::helpers::compute_timestamp_in_seconds;
-use crate::errors::TokenErrors::{TokenEncodingFailed, TokenDecodingFailed};
-use std::collections::HashMap;
-
+use crate::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct ClientClaims {
@@ -60,37 +61,37 @@ impl ClientClaims {
     }
 }
 
-pub fn encode_client_token(private_certificate: &[u8], user_id: &[u8], _buf: Option<HashMap<u64, Vec<u8>>>, _ref: u64, exp: Option<i64>, nbf: Option<i64>, iat: Option<i64>) -> Result<String, Error> {
+pub fn encode_client_token<T: AsRef<[u8]>>(key: &PrivateKey, user_id: T, _buf: Option<HashMap<u64, Vec<u8>>>, _ref: u64, exp: Option<i64>, nbf: Option<i64>, iat: Option<i64>) -> Result<String, Error> {
     let header = Header::new(Algorithm::RS256);
-    let claims = ClientClaims::new(user_id.to_vec(), _buf, _ref, exp, nbf, iat);
-    let key = EncodingKey::from_rsa_pem(private_certificate);
+    let claims = ClientClaims::new(user_id.as_ref().to_vec(), _buf, _ref, exp, nbf, iat);
+    let key = EncodingKey::from_rsa_pem(key.as_bytes());
     if key.is_err() {
         let msg = key.err().unwrap().to_string();
-        return Err(TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
     };
     let key = key.unwrap();
     let token = encode(&header, &claims, &key);
     if token.is_err() {
         let msg = token.err().unwrap().to_string();
-        return Err(TokenEncodingFailed("Unable to decode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenEncodingFailed("Unable to decode token".to_string(), msg).into());
     };
     let token = token.ok().unwrap();
     Ok(token)
 }
 
-pub fn decode_client_token(public_certificate: &[u8], token: &str) -> Result<ClientClaims, Error> {
+pub fn decode_client_token(public_certificate: &PublicKey, token: &str) -> Result<ClientClaims, Error> {
     let validation = Validation::new(Algorithm::RS256);
-    let key = DecodingKey::from_rsa_pem(public_certificate);
+    let key = DecodingKey::from_rsa_pem(public_certificate.as_bytes());
     if key.is_err() {
         let msg = key.err().unwrap().to_string();
-        return Err(TokenDecodingFailed("Unable to encode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenDecodingFailed("Unable to encode token".to_string(), msg).into());
     };
     let key = key.unwrap();
 
     let result = decode::<ClientClaims>(token, &key, &validation);
     if result.is_err() {
         let msg = result.err().unwrap().to_string();
-        return Err(TokenDecodingFailed("Unable to decode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenDecodingFailed("Unable to decode token".to_string(), msg).into());
     };
     let claims = result.ok().unwrap();
     let claims = claims.claims;
@@ -156,42 +157,62 @@ impl ServerClaims {
     }
 }
 
-pub fn encode_server_token(private_certificate: &[u8], user_id: &[u8], _client: Option<HashMap<u64, Vec<u8>>>, _server: Option<HashMap<u64, Vec<u8>>>, _ref: u64, exp: Option<i64>, nbf: Option<i64>, iat: Option<i64>) -> Result<String, Error> {
+pub fn encode_server_token<T: AsRef<[u8]>>(key: &PrivateKey, user_id: T, _client: Option<HashMap<u64, Vec<u8>>>, _server: Option<HashMap<u64, Vec<u8>>>, _ref: u64, exp: Option<i64>, nbf: Option<i64>, iat: Option<i64>) -> Result<String, Error> {
     let header = Header::new(Algorithm::RS256);
-    let claims = ServerClaims::new(user_id.to_vec(), _client, _server, _ref, exp, nbf, iat);
-    let key = EncodingKey::from_rsa_pem(private_certificate);
+    let claims = ServerClaims::new(user_id.as_ref().to_vec(), _client, _server, _ref, exp, nbf, iat);
+    let key = EncodingKey::from_rsa_pem(key.as_bytes());
     if key.is_err() {
         let msg = key.err().unwrap().to_string();
-        return Err(TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
     };
     let key = key.unwrap();
     let token = encode(&header, &claims, &key);
     if token.is_err() {
         let msg = token.err().unwrap().to_string();
-        return Err(TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenEncodingFailed("Unable to encode token".to_string(), msg).into());
     };
     let token = token.ok().unwrap();
     Ok(token)
 }
 
-pub fn decode_server_token(public_certificate: &[u8], token: &str) -> Result<ServerClaims, Error> {
+pub fn decode_server_token<T: AsRef<str>>(key: &PublicKey, token: T) -> Result<ServerClaims, Error> {
     let validation = Validation::new(Algorithm::RS256);
-    let key = DecodingKey::from_rsa_pem(public_certificate);
+    let key = DecodingKey::from_rsa_pem(key.as_bytes());
     if key.is_err() {
         let msg = key.err().unwrap().to_string();
-        return Err(TokenDecodingFailed("Unable to encode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenDecodingFailed("Unable to encode token".to_string(), msg).into());
     };
     let key = key.unwrap();
-    let result = decode::<ServerClaims>(token, &key, &validation);
+    let result = decode::<ServerClaims>(token.as_ref(), &key, &validation);
     if result.is_err() {
         let msg = result.err().unwrap().to_string();
-        return Err(TokenDecodingFailed("Unable to decode token".to_string(), msg).into());
+        return Err(TokenErrors::TokenDecodingFailed("Unable to decode token".to_string(), msg).into());
     };
     let claims = result.ok().unwrap();
     let claims = claims.claims;
     Ok(claims)
 }
 
+pub fn prepare_user_authentication_token<T: AsRef<[u8]>>(key: &PrivateKey, iss: T, reference: u64, iat: i64, nbf: i64, exp: i64, buffer: Option<HashMap<u64, Vec<u8>>>) -> Result<String, Error> {
+    let token = encode_client_token(
+        key, iss, buffer, reference, Some(exp), Some(nbf), Some(iat),
+    )?;
+    Ok(token)
+}
+
+pub fn prepare_client_refresh_token<T: AsRef<[u8]>>(key: &PrivateKey, iss: T, reference: u64, iat: i64, nbf: i64, exp: i64) -> Result<String, Error> {
+    let token = encode_client_token(
+        key, iss, None, reference, Some(exp), Some(nbf), Some(iat),
+    )?;
+    Ok(token)
+}
+
+pub fn prepare_server_token<T: AsRef<[u8]>>(key: &PrivateKey, iss: T, reference: u64, iat: i64, nbf: i64, exp: i64, client: Option<HashMap<u64, Vec<u8>>>, server: Option<HashMap<u64, Vec<u8>>>) -> Result<String, Error> {
+    let token = encode_server_token(
+        key, iss, client, server, reference, Some(exp), Some(nbf), Some(iat),
+    )?;
+    Ok(token)
+}
 
 //=====
 
@@ -208,7 +229,7 @@ mod tests {
         let mut buffer = HashMap::new();
         buffer.insert(
             digest(&mut DefaultHasher::default(), "buffer".as_bytes()),
-            _buf
+            _buf,
         );
 
         let _ref: u64 = 1u64;
@@ -229,7 +250,6 @@ mod tests {
             _buf);
 
 
-
         let _ref: u64 = 1u64;
         let exp = iat + 86400;
         let nbf = iat;
@@ -242,10 +262,10 @@ mod tests {
 
     #[test]
     fn invalidate_encode_client_token() {
-        let private_certificate = "no certificates".as_bytes().to_vec();
+        let private_certificate = PrivateKey::from("no certificates".to_string());
         let user_id = "userid".as_bytes().to_vec();
         let _ref = 1u64;
-        let result = encode_client_token(private_certificate.as_slice(), user_id.as_slice(), None, _ref, None, None, None);
+        let result = encode_client_token(&private_certificate, user_id.as_slice(), None, _ref, None, None, None);
         assert!(result.is_err());
     }
 
@@ -258,11 +278,11 @@ mod tests {
         let _server = "server".as_bytes().to_vec();
         client_session.insert(
             digest(&mut DefaultHasher::default(), "client".as_bytes()),
-            _client
+            _client,
         );
         server_session.insert(
             digest(&mut DefaultHasher::default(), "server".as_bytes()),
-            _server
+            _server,
         );
         let _ref = 1u64;
 
@@ -276,18 +296,18 @@ mod tests {
 
     #[test]
     fn invalidate_encode_server_token() {
-        let private_certificate = "no certificates".as_bytes().to_vec();
+        let private_certificate = PrivateKey::from("no certificates".to_string());
         let user_id = "userid".as_bytes().to_vec();
         let _ref = 1u64;
-        let result = encode_server_token(private_certificate.as_slice(), user_id.as_slice(), None, None, _ref, None, None, None);
+        let result = encode_server_token(&private_certificate, user_id.as_slice(), None, None, _ref, None, None, None);
         assert!(result.is_err());
     }
 
     #[test]
     fn invalidate_decode_server_token() {
-        let private_certificate = "no certificates".as_bytes().to_vec();
+        let private_certificate = PublicKey::from("no certificates".to_string());
         let token = "no token";
-        let result = decode_server_token(private_certificate.as_slice(), token);
+        let result = decode_server_token(&private_certificate, token);
         assert!(result.is_err());
     }
 }
