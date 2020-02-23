@@ -1,6 +1,6 @@
 [package]
 name = "jwtvault"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Saurav Gupta <sgrust01@gmail.com>"]
 description = """
 Highly flexible library to manage and orchestrate JWT workflow
@@ -12,6 +12,7 @@ publish = true
 keywords = ["jwt","JSONWebToken", "session", "management", "security"]
 license = "MIT"
 categories = ["authentication", "web-programming"]
+readme = "README.md"
 
 [dependencies]
 async-trait = "0.1.24"
