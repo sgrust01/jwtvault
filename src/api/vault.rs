@@ -17,6 +17,14 @@ pub trait UserAuthentication {
     async fn check_user_valid(&mut self, user: &str, password: &str) -> Result<Option<Session>, Error>;
 }
 
+pub trait PasswordHasher<H: Default> {
+    /// Implementation Required
+    fn trust_token(&self) -> bool;
+    fn hash_user_password<T: AsRef<str>>(&self, user: T,  password: T) -> Result<String, Error>;
+    fn verify_user_password<T: AsRef<str>>(&self, user: T,  password: T,  hash: T) -> Result<bool, Error>;
+
+}
+
 /// Workflow for library user
 /// [DefaultVault](../../utils/vault/struct.DefaultVault.html)
 #[async_trait]
@@ -86,7 +94,7 @@ pub async fn resolve_session_from_client_refresh_token<H, V>(vault: &mut V, user
 }
 
 pub async fn continue_login<H, V>(vault: &mut V, user: &str, pass: &str, refresh_token_expiry_in_seconds: Option<i64>, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
-    where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
+    where H: Default + Hasher, V: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence  {
     let session = vault.check_user_valid(user, pass).await?;
     let (client, server) = match session {
         Some(s) => (s.client, s.server),

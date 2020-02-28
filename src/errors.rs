@@ -36,6 +36,13 @@ pub enum LoginFailed {
 
     #[fail(display = "{} - Reason: {}", 0, 1)]
     InvalidTokenOwner(String, String),
+
+    #[fail(display = "{} - Reason: {}", 0, 1)]
+    PasswordHashingFailed(String, String),
+
+    #[fail(display = "{} - Reason: {}", 0, 1)]
+    PasswordVerificationFailed(String, String),
+
 }
 
 #[cfg(test)]

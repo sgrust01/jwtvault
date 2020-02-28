@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
-
+use argonautica::Hasher;
 
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
@@ -13,11 +13,41 @@ pub struct DefaultVault {
     private_authentication_certificate: PrivateKey,
     public_refresh_certificate: PublicKey,
     private_refresh_certificate: PrivateKey,
+    password_hashing_secret: PrivateKey,
+    trust_token: bool,
     store: HashMap<u64, String>,
     users: HashMap<String, String>,
 }
 
 impl PersistenceHasher<DefaultHasher> for DefaultVault {}
+
+impl PasswordHasher<Hasher<'static>> for DefaultVault {
+    fn trust_token(&self) -> bool {
+        self.trust_token
+    }
+    fn hash_user_password<T: AsRef<str>>(&self, user: T, password: T) -> Result<String, Error> {
+        let secret_key = self.password_hashing_secret.as_str();
+        let result = hash_password_with_argon(password.as_ref(), secret_key.as_ref()).map_err(|e| {
+            let msg = format!("Login failed for user: {}", user.as_ref());
+            let reason = e.to_string();
+            LoginFailed::PasswordHashingFailed(msg, reason).into()
+        });
+
+        result
+    }
+    fn verify_user_password<T: AsRef<str>>(&self, user: T, password: T, hash: T) -> Result<bool, Error> {
+        let secret_key = self.password_hashing_secret.as_str();
+        let result = verify_user_password_with_argon(
+            password.as_ref(), secret_key.as_ref(), hash.as_ref(),
+        ).map_err(|e| {
+            let reason = e.to_string();
+            let msg = format!("Login verification for user: {} Reason: {}", user.as_ref(), reason);
+            let reason = e.to_string();
+            LoginFailed::PasswordVerificationFailed(msg, reason).into()
+        });
+        result
+    }
+}
 
 impl Store for DefaultVault {
     fn public_authentication_certificate(&self) -> &PublicKey {
@@ -35,14 +65,19 @@ impl Store for DefaultVault {
     fn private_refresh_certificate(&self) -> &PrivateKey {
         &self.private_refresh_certificate
     }
+
+    fn password_hashing_secret(&self) -> &PrivateKey {
+        &self.password_hashing_secret
+    }
 }
 
 impl DefaultVault {
-    pub fn new<T: Keys>(loader: T, users: HashMap<String, String>) -> Self {
+    pub fn new<T: Keys>(loader: T, users: HashMap<String, String>, trust_token: bool) -> Self {
         let public_authentication_certificate = loader.public_authentication_certificate().clone();
         let private_authentication_certificate = loader.private_authentication_certificate().clone();
         let public_refresh_certificate = loader.public_refresh_certificate().clone();
         let private_refresh_certificate = loader.private_refresh_certificate().clone();
+        let password_hashing_secret = loader.password_hashing_secret().clone();
         let store = HashMap::new();
 
         Self {
@@ -50,6 +85,8 @@ impl DefaultVault {
             private_authentication_certificate,
             public_refresh_certificate,
             private_refresh_certificate,
+            password_hashing_secret,
+            trust_token,
             store,
             users,
         }
@@ -88,18 +125,20 @@ impl UserIdentity for DefaultVault {
 impl UserAuthentication for DefaultVault {
     async fn check_user_valid(&mut self, user: &str, password: &str) -> Result<Option<Session>, Error> {
         let password_from_disk = self.users.get(&user.to_string());
+
         if password_from_disk.is_none() {
             let msg = "Login Failed".to_string();
             let reason = "Invalid userid/password".to_string();
             return Err(LoginFailed::InvalidPassword(msg, reason).into());
         };
-
         let password_from_disk = password_from_disk.unwrap();
-        if password != password_from_disk.as_str() {
+        let result = self.verify_user_password(user, password, password_from_disk)?;
+        if !result {
             let msg = "Login Failed".to_string();
             let reason = "Invalid userid/password".to_string();
             return Err(LoginFailed::InvalidPassword(msg, reason).into());
         };
+
         let reference = digest::<_, DefaultHasher>(user.as_bytes());
         let mut server = HashMap::new();
         server.insert(reference, user.clone().as_bytes().to_vec());
@@ -142,18 +181,25 @@ mod tests {
         // User: John Doe
         let user_john = "john_doe";
         let password_for_john = "john";
+        // Save value 'hashed_password_for_john' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
 
         // User: Jane Doe
         let user_jane = "jane_doe";
         let password_for_jane = "jane";
+        // Save 'hashed_password_for_jane' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+
         let mut users = HashMap::new();
 
         // load users and their password from database/somewhere
-        users.insert(user_john.to_string(), password_for_john.to_string());
-        users.insert(user_jane.to_string(), password_for_jane.to_string());
+        users.insert(user_john.to_string(), hashed_password_for_john.to_string());
+        users.insert(user_jane.to_string(), hashed_password_for_jane.to_string());
 
         // Initialize vault
-        let mut vault = DefaultVault::new(certificate, users);
+        let mut vault = DefaultVault::new(certificate, users, false);
 
         let result = block_on(
             vault.login(
@@ -162,6 +208,7 @@ mod tests {
                 None,
                 None)
         );
+
         let token = result.ok().unwrap();
         let client_claim = decode_client_token(
             &vault.public_authentication_certificate, token.authentication(),

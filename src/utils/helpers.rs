@@ -1,5 +1,4 @@
 use std::fs::File;
-use failure::Error;
 use std::io::Read;
 use rand::Rng;
 use chrono::Utc;
@@ -7,6 +6,7 @@ use std::hash::Hasher;
 use futures::executor::LocalPool;
 use futures::Future;
 use crate::prelude::*;
+use argonautica::{Hasher as ArgonHasher, Verifier};
 
 pub fn load_file_from_disk(path: &str) -> Result<Vec<u8>, Error>
 {
@@ -76,6 +76,23 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
     pool.run_until(f)
 }
 
+pub fn hash_password_with_argon<T: AsRef<str>>(password: T, secret_key: T) -> Result<String, argonautica::Error> {
+    let mut hasher = ArgonHasher::default();
+    let secret_key = secret_key.as_ref();
+    hasher.with_password(password.as_ref())
+        .with_secret_key(secret_key)
+        .hash()
+}
+
+pub fn verify_user_password_with_argon<T: AsRef<str>>(password: T, secret_key: T, hash: T) -> Result<bool, argonautica::Error> {
+    let mut verifier = Verifier::default();
+    let secret_key = secret_key.as_ref();
+    verifier.with_hash(hash.as_ref())
+        .with_password(password.as_ref())
+        .with_secret_key(secret_key)
+        .verify()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,5 +131,67 @@ mod tests {
         let data = "data";
         let run4 = digest(&mut hasher, data.as_bytes());
         assert_eq!(run1, run4);
+    }
+
+    #[test]
+    fn validate_argon_workflow_for_correct_workflow() {
+        let certificate = CertificateManger::default();
+
+        let secret_key = certificate.password_hashing_secret();
+        let plain_password = "password";
+
+        let hash = hash_password_with_argon(plain_password, &secret_key).unwrap();
+
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &hash).unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn validate_argon_workflow_with_incorrect_password() {
+        let secret_key = "some_super_secret";
+
+        let plain_password = "password";
+        let hash = hash_password_with_argon(plain_password, &secret_key).unwrap();
+
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &hash).unwrap();
+        assert!(result);
+
+        let plain_password = "wrong_password";
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &hash).unwrap();
+
+        assert!(!result);
+    }
+
+    #[test]
+    fn validate_argon_workflow_with_incorrect_secret() {
+        let secret_key = "some_super_secret";
+
+        let plain_password = "password";
+        let hash = hash_password_with_argon(plain_password, &secret_key).unwrap();
+
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &hash).unwrap();
+        assert!(result);
+
+        let secret_key = "some_other_super_secret";
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &hash).unwrap();
+
+        assert!(!result);
+    }
+
+    #[test]
+    fn validate_argon_workflow_with_incorrect_hash() {
+        let secret_key = "some_super_secret";
+
+        let plain_password = "password";
+        let hash = hash_password_with_argon(plain_password, &secret_key).unwrap();
+
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &hash).unwrap();
+        assert!(result);
+
+        let some_other_hash = hash_password_with_argon("some_other_password", &secret_key).unwrap();
+
+        let result = verify_user_password_with_argon(plain_password, &secret_key, &some_other_hash).unwrap();
+
+        assert!(!result);
     }
 }

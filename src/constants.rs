@@ -14,3 +14,5 @@ pub const DEFAULT_PRIVATE_AUTHENTICATION_TOKEN_PATH: &str = "store/private_authe
 pub const DEFAULT_PUBLIC_REFRESH_TOKEN_PATH: &str = "store/public_refresh_token.pem";
 pub const DEFAULT_PRIVATE_REFRESH_TOKEN_PATH: &str = "store/private_refresh_token.pem";
 
+pub const DEFAULT_PASSWORD_HASHING_SECRET_PATH: &str = "store/password_hashing_secret.pem";
+
