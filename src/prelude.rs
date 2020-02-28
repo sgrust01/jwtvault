@@ -5,13 +5,13 @@ pub use async_trait::async_trait;
 pub use crate::api::certificates::{Store, Keys, PublicKey, PrivateKey};
 pub use crate::api::session::{Session, Token};
 pub use crate::api::persistence::{Persistence, PersistenceHasher};
-pub use crate::api::vault::{UserIdentity, UserAuthentication, Workflow, resolve_session_from_client_authentication_token, resolve_session_from_client_refresh_token, continue_login, continue_renew, continue_logout, continue_revoke};
+pub use crate::api::vault::{UserIdentity, UserAuthentication, PasswordHasher, Workflow, resolve_session_from_client_authentication_token, resolve_session_from_client_refresh_token, continue_login, continue_renew, continue_logout, continue_revoke};
 
 pub use crate::errors::{CertificateError, TokenErrors, LoginFailed};
 
 pub use crate::utils::certificates::CertificateManger;
 pub use crate::utils::vault::DefaultVault;
-pub use crate::utils::helpers::{load_file_from_disk, compute_timestamp_in_seconds, compute_refresh_token_expiry, compute_authentication_token_expiry, block_on};
+pub use crate::utils::helpers::{load_file_from_disk, compute_timestamp_in_seconds, compute_refresh_token_expiry, compute_authentication_token_expiry, block_on, hash_password_with_argon, verify_user_password_with_argon};
 pub use crate::utils::token::{ClientClaims, ServerClaims, encode_client_token, decode_client_token, prepare_client_refresh_token, prepare_server_token, prepare_user_authentication_token, encode_server_token, decode_server_token};
 pub use crate::utils::digestors::{resolve_refresh_reference, resolve_authentication_reference, digest};
 

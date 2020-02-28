@@ -13,6 +13,8 @@ PUBLIC_AUTHENTICATION_TOKEN="public_authentication_token"
 PRIVATE_REFRESH_TOKEN="private_refresh_token"
 PUBLIC_REFRESH_TOKEN="public_refresh_token"
 
+PASSWORD_HASHING_SECRET="password_hashing_secret"
+
 mkdir -p ${OUT_DIR}
 
 openssl genrsa -out ${OUT_DIR}/${PRIVATE_AUTHENTICATION_TOKEN}.pem 2048
@@ -20,3 +22,5 @@ openssl rsa -in ${OUT_DIR}/${PRIVATE_AUTHENTICATION_TOKEN}.pem -outform PEM -pub
 
 openssl genrsa -out ${OUT_DIR}/${PRIVATE_REFRESH_TOKEN}.pem 2048
 openssl rsa -in ${OUT_DIR}/${PRIVATE_REFRESH_TOKEN}.pem -outform PEM -pubout -out ${OUT_DIR}/${PUBLIC_REFRESH_TOKEN}.pem
+
+openssl genrsa -out ${OUT_DIR}/${PASSWORD_HASHING_SECRET}.pem 2048
