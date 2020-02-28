@@ -5,7 +5,7 @@ pub use async_trait::async_trait;
 pub use crate::api::certificates::{Store, Keys, PublicKey, PrivateKey};
 pub use crate::api::session::{Session, Token};
 pub use crate::api::persistence::{Persistence, PersistenceHasher};
-pub use crate::api::vault::{UserIdentity, UserAuthentication, PasswordHasher, Workflow, resolve_session_from_client_authentication_token, resolve_session_from_client_refresh_token, continue_login, continue_renew, continue_logout, continue_revoke};
+pub use crate::api::vault::{UserIdentity, UserAuthentication, PasswordHasher, Workflow, TrustToken, resolve_session_from_client_authentication_token, resolve_session_from_client_refresh_token, continue_login, continue_renew, continue_logout, continue_revoke};
 
 pub use crate::errors::{CertificateError, TokenErrors, LoginFailed};
 

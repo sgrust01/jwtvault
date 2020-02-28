@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use argonautica::Hasher;
 
+
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
 
@@ -14,17 +15,22 @@ pub struct DefaultVault {
     public_refresh_certificate: PublicKey,
     private_refresh_certificate: PrivateKey,
     password_hashing_secret: PrivateKey,
-    trust_token: bool,
+    trust_token_bearer: bool,
     store: HashMap<u64, String>,
     users: HashMap<String, String>,
 }
 
 impl PersistenceHasher<DefaultHasher> for DefaultVault {}
 
-impl PasswordHasher<Hasher<'static>> for DefaultVault {
-    fn trust_token(&self) -> bool {
-        self.trust_token
+
+impl TrustToken for DefaultVault {
+    fn trust_token_bearer(&self) -> bool {
+        self.trust_token_bearer
     }
+}
+
+
+impl PasswordHasher<Hasher<'static>> for DefaultVault {
     fn hash_user_password<T: AsRef<str>>(&self, user: T, password: T) -> Result<String, Error> {
         let secret_key = self.password_hashing_secret.as_str();
         let result = hash_password_with_argon(password.as_ref(), secret_key.as_ref()).map_err(|e| {
@@ -72,7 +78,7 @@ impl Store for DefaultVault {
 }
 
 impl DefaultVault {
-    pub fn new<T: Keys>(loader: T, users: HashMap<String, String>, trust_token: bool) -> Self {
+    pub fn new<T: Keys>(loader: T, users: HashMap<String, String>, trust_token_bearer: bool) -> Self {
         let public_authentication_certificate = loader.public_authentication_certificate().clone();
         let private_authentication_certificate = loader.private_authentication_certificate().clone();
         let public_refresh_certificate = loader.public_refresh_certificate().clone();
@@ -86,7 +92,7 @@ impl DefaultVault {
             public_refresh_certificate,
             private_refresh_certificate,
             password_hashing_secret,
-            trust_token,
+            trust_token_bearer,
             store,
             users,
         }
@@ -176,7 +182,178 @@ mod tests {
 
 
     #[test]
-    fn test_user_workflow() {
+    fn test_trusted_token_bearer_workflow() {
+        let certificate = CertificateManger::default();
+        // User: John Doe
+        let user_john = "john_doe";
+        let password_for_john = "john";
+        // Save value 'hashed_password_for_john' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+
+        // User: Jane Doe
+        let user_jane = "jane_doe";
+        let password_for_jane = "jane";
+        // Save 'hashed_password_for_jane' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+
+        let mut users = HashMap::new();
+
+        // load users and their password from database/somewhere
+        users.insert(user_john.to_string(), hashed_password_for_john.to_string());
+        users.insert(user_jane.to_string(), hashed_password_for_jane.to_string());
+
+        // Initialize vault
+        let mut vault = DefaultVault::new(certificate, users, true);
+
+        // Login: John Doe
+        let result = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        );
+
+        let token = result.ok().unwrap();
+
+        // Decode client token
+        let client_claim = decode_client_token(
+            &vault.public_authentication_certificate, token.authentication(),
+        ).ok().unwrap();
+        assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
+
+        // Decode server token
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, token.authentication(),
+            )
+        );
+        let server_claims = result.ok().unwrap();
+        // Validate client sub is same as Server sub
+        assert_eq!(client_claim.sub(), server_claims.sub());
+
+        // Renew: John Doe
+        let new_auth_token = block_on(
+            vault.renew(
+                user_john,
+                token.refresh(),
+                None,
+            )
+        ).ok().unwrap();
+
+        // Decode client token
+        let new_client_claim = decode_client_token(
+            &vault.public_authentication_certificate, &new_auth_token,
+        ).ok().unwrap();
+        assert_eq!(new_client_claim.sub(), server_claims.sub());
+
+        // Decode server token
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, &new_auth_token,
+            )
+        ).ok().unwrap();
+
+        // Validate client sub is same as Server sub
+        assert_eq!(result.sub().as_slice(), user_john.as_bytes());
+
+        // Validate old token is invalid
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, &token.authentication(),
+            )
+        );
+        assert!(result.is_err());
+
+        // Logout: John Doe
+        let result = block_on(
+            vault.logout(
+                user_john, &new_auth_token,
+            )
+        );
+        assert!(result.is_ok());
+
+        // Validate first authentication token cannot be used
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, &token.authentication(),
+            )
+        );
+        assert!(result.is_err());
+
+        // Validate second authentication token cannot be used
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, &new_auth_token,
+            )
+        );
+        assert!(result.is_err());
+
+        // Validate renew with old refresh is not allowed
+        let result = block_on(
+            vault.renew(
+                user_john,
+                token.refresh(),
+                None,
+            )
+        );
+        assert!(result.is_err());
+
+        // Re-login: John Doe
+        let token = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        ).ok().unwrap();
+
+        // Validate decode server claims post re-login
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, token.authentication(),
+            )
+        );
+
+        // Revoke all token
+        let result = block_on(
+            vault.revoke(&token.refresh())
+        );
+        assert!(result.is_ok());
+
+        // Validate renew is not allowed post revoke
+        let result = block_on(
+            vault.renew(user_john, &token.refresh(), None)
+        );
+        assert!(result.is_err());
+
+        // Validate renew is not allowed post revoke by feeding incorrect token
+        let result = block_on(
+            vault.renew(user_john, &token.authentication(), None)
+        );
+        assert!(result.is_err());
+
+        // Decode session from client authentication token is not allowed
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, &token.authentication(),
+            )
+        );
+        assert!(result.is_err());
+
+        // Decode session from client refresh token is not allowed
+        let result = block_on(
+            resolve_session_from_client_refresh_token(
+                &mut vault, user_john, &token.refresh(),
+            )
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_untrusted_token_bearer_workflow() {
         let certificate = CertificateManger::default();
         // User: John Doe
         let user_john = "john_doe";
@@ -201,6 +378,7 @@ mod tests {
         // Initialize vault
         let mut vault = DefaultVault::new(certificate, users, false);
 
+        // Login: John Doe
         let result = block_on(
             vault.login(
                 user_john,
@@ -210,18 +388,26 @@ mod tests {
         );
 
         let token = result.ok().unwrap();
+
+        // Decode client token
         let client_claim = decode_client_token(
             &vault.public_authentication_certificate, token.authentication(),
         ).ok().unwrap();
-        assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
+        let user_john_from_token = Vec::<u8>::new();
+        assert_eq!(client_claim.sub().as_slice(), user_john_from_token.as_slice());
+
+        // Decode server token
         let result = block_on(
             resolve_session_from_client_authentication_token(
                 &mut vault, user_john, token.authentication(),
             )
         );
         let server_claims = result.ok().unwrap();
-        assert_eq!(client_claim.sub(), server_claims.sub());
+        // Validate client sub is same as Server sub
+        assert_eq!(user_john.as_bytes(), server_claims.sub().as_slice());
 
+
+        // Renew: John Doe
         let new_auth_token = block_on(
             vault.renew(
                 user_john,
@@ -229,19 +415,26 @@ mod tests {
                 None,
             )
         ).ok().unwrap();
+
+        // Decode client token
         let new_client_claim = decode_client_token(
             &vault.public_authentication_certificate, &new_auth_token,
         ).ok().unwrap();
-        assert_eq!(new_client_claim.sub(), server_claims.sub());
+        assert_eq!(new_client_claim.sub().as_slice(), user_john_from_token.as_slice());
+        assert_eq!(user_john.as_bytes(), server_claims.sub().as_slice());
 
+        // Decode server token
         let result = block_on(
             resolve_session_from_client_authentication_token(
                 &mut vault, user_john, &new_auth_token,
             )
         ).ok().unwrap();
 
+        // Validate client sub is same as Server sub
+        assert_eq!(result.sub().as_slice(), user_john.as_bytes());
         assert_eq!(result.sub().as_slice(), user_john.as_bytes());
 
+        // Validate old token is invalid
         let result = block_on(
             resolve_session_from_client_authentication_token(
                 &mut vault, user_john, &token.authentication(),
@@ -249,6 +442,7 @@ mod tests {
         );
         assert!(result.is_err());
 
+        // Logout: John Doe
         let result = block_on(
             vault.logout(
                 user_john, &new_auth_token,
@@ -256,6 +450,7 @@ mod tests {
         );
         assert!(result.is_ok());
 
+        // Validate first authentication token cannot be used
         let result = block_on(
             resolve_session_from_client_authentication_token(
                 &mut vault, user_john, &token.authentication(),
@@ -263,6 +458,7 @@ mod tests {
         );
         assert!(result.is_err());
 
+        // Validate second authentication token cannot be used
         let result = block_on(
             resolve_session_from_client_authentication_token(
                 &mut vault, user_john, &new_auth_token,
@@ -270,6 +466,17 @@ mod tests {
         );
         assert!(result.is_err());
 
+        // Validate renew with old refresh is not allowed
+        let result = block_on(
+            vault.renew(
+                user_john,
+                token.refresh(),
+                None,
+            )
+        );
+        assert!(result.is_err());
+
+        // Re-login: John Doe
         let token = block_on(
             vault.login(
                 user_john,
@@ -278,21 +485,32 @@ mod tests {
                 None)
         ).ok().unwrap();
 
+        // Validate decode server claims post re-login
+        let result = block_on(
+            resolve_session_from_client_authentication_token(
+                &mut vault, user_john, token.authentication(),
+            )
+        );
+
+        // Revoke all token
         let result = block_on(
             vault.revoke(&token.refresh())
         );
         assert!(result.is_ok());
 
+        // Validate renew is not allowed post revoke
         let result = block_on(
             vault.renew(user_john, &token.refresh(), None)
         );
         assert!(result.is_err());
 
+        // Validate renew is not allowed post revoke by feeding incorrect token
         let result = block_on(
             vault.renew(user_john, &token.authentication(), None)
         );
         assert!(result.is_err());
 
+        // Decode session from client authentication token is not allowed
         let result = block_on(
             resolve_session_from_client_authentication_token(
                 &mut vault, user_john, &token.authentication(),
@@ -300,6 +518,7 @@ mod tests {
         );
         assert!(result.is_err());
 
+        // Decode session from client refresh token is not allowed
         let result = block_on(
             resolve_session_from_client_refresh_token(
                 &mut vault, user_john, &token.refresh(),
