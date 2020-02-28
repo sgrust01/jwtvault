@@ -155,7 +155,7 @@ impl UserAuthentication for DefaultVault {
 
 
 #[async_trait]
-impl Workflow for DefaultVault {
+impl Workflow<DefaultHasher, Hasher<'static>> for DefaultVault {
     async fn login(&mut self, user: &str, pass: &str, authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error> {
         continue_login(self, user, pass, authentication_token_expiry_in_seconds, refresh_token_expiry_in_seconds).await
     }
@@ -316,6 +316,7 @@ mod tests {
                 &mut vault, user_john, token.authentication(),
             )
         );
+        assert!(result.is_ok());
 
         // Revoke all token
         let result = block_on(
@@ -491,6 +492,7 @@ mod tests {
                 &mut vault, user_john, token.authentication(),
             )
         );
+        assert!(result.is_ok());
 
         // Revoke all token
         let result = block_on(
