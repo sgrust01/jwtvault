@@ -34,6 +34,7 @@
 * Easy start
 * No un-safe code
 * Runs on stable rust
+* Uses [Argon2](https://en.wikipedia.org/wiki/Argon2) (see [video](https://www.youtube.com/watch?v=Sc3aHMCc4h0&t=339s))
 * Library approach (Requires no runtime)
 * Supports plugable components
 * Invalidates old refresh upon new refresh token renewal
@@ -65,25 +66,39 @@ use jwtvault::prelude::*;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 
+
 fn main() {
+
     let mut users = HashMap::new();
+
+    let loader = CertificateManger::default();
 
     // User: John Doe
     let user_john = "john_doe";
     let password_for_john = "john";
 
+    // This should ideally be pre-computed during user sign-up/password reset/change password
+    let hashed_password_for_john = hash_password_with_argon(
+        password_for_john,
+        loader.password_hashing_secret().as_str(),
+    ).unwrap();
+
     // User: Jane Doe
     let user_jane = "jane_doe";
     let password_for_jane = "jane";
 
-    // load users and their password from database/somewhere
-    users.insert(user_john.to_string(), password_for_john.to_string());
-    users.insert(user_jane.to_string(), password_for_jane.to_string());
+    // This should ideally be pre-computed during user sign-up/password reset/change password
+    let hashed_password_for_jane = hash_password_with_argon(
+        password_for_jane,
+        loader.password_hashing_secret().as_str(),
+    ).unwrap();
 
-    let loader = CertificateManger::default();
+    // load users and their (argon hashed) password from database/somewhere
+    users.insert(user_john.to_string(), hashed_password_for_john);
+    users.insert(user_jane.to_string(), hashed_password_for_jane);
 
     // Initialize vault
-    let mut vault = DefaultVault::new(loader, users);
+    let mut vault = DefaultVault::new(loader, users, false);
 
     // John needs to login now
     let token = block_on(vault.login(
