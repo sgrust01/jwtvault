@@ -23,10 +23,8 @@
 </div>
 
 ## TODO
-
 * Add more examples
 * Improve coverage
-
 
 ## Features
 * Manages & Orchestrates JWT for user login, logout & renew
@@ -40,6 +38,8 @@
 * Invalidates old refresh upon new refresh token renewal
 * Invalidates old authentication upon new authentication token renewal
 * Handles Thundering herd problem upon authentication token expiry
+* Works with any web-server, any password hashing, and any backend ([here](https://github.com/sgrust01/jwtvault_examples))
+
 
 ## Quickstart
 
