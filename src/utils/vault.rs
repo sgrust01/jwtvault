@@ -218,9 +218,15 @@ mod tests {
 
         let token = result.ok().unwrap();
 
-        // Decode client token
+        // Decode client authentication token
         let client_claim = decode_client_token(
             &vault.public_authentication_certificate, token.authentication(),
+        ).ok().unwrap();
+        assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
+
+        // Decode client refresh token
+        let client_claim = decode_client_token(
+            &vault.public_refresh_certificate, token.refresh(),
         ).ok().unwrap();
         assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
 
@@ -390,9 +396,16 @@ mod tests {
 
         let token = result.ok().unwrap();
 
-        // Decode client token
+        // Decode client authentication token
         let client_claim = decode_client_token(
             &vault.public_authentication_certificate, token.authentication(),
+        ).ok().unwrap();
+        let user_john_from_token = Vec::<u8>::new();
+        assert_eq!(client_claim.sub().as_slice(), user_john_from_token.as_slice());
+
+        // Decode client refresh token
+        let client_claim = decode_client_token(
+            &vault.public_refresh_certificate, token.refresh(),
         ).ok().unwrap();
         let user_john_from_token = Vec::<u8>::new();
         assert_eq!(client_claim.sub().as_slice(), user_john_from_token.as_slice());

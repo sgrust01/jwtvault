@@ -4,7 +4,7 @@ use std::hash::Hasher;
 
 /// Return normally if comparision succeeds else return an Error
 #[async_trait]
-pub trait  UserIdentity {
+pub trait UserIdentity {
     /// Implementation Required
     async fn check_same_user(&self, user: &str, user_from_token: &str) -> Result<(), Error>;
 }
@@ -90,23 +90,35 @@ pub async fn resolve_session_from_client_authentication_token<W, H, D>(vault: &m
 pub async fn resolve_session_from_client_refresh_token<W, H, D>(vault: &mut W, user: &str, client_refresh_token: &str) -> Result<ServerClaims, Error>
     where H: Hasher + Default, D: Default, W: Workflow<H, D> {
     let claims = decode_client_token(vault.public_refresh_certificate(), client_refresh_token)?;
-    let user_from_token = String::from_utf8_lossy(claims.sub()).to_string();
-    vault.check_same_user(user, user_from_token.as_str()).await?;
     let reference = claims.reference();
-    let token = vault.load(reference).await;
-    if token.is_none() {
+
+    // load the server side token via the reference on the client side
+    let refresh_token_from_store = vault.load(reference).await;
+    if refresh_token_from_store.is_none() {
         let msg = format!("User: {:?} Reference: {}", user, reference);
         let reason = "Missing Server Refresh Token".to_string();
         return Err(TokenErrors::MissingServerRefreshToken(msg, reason).into());
     };
-    let token = token.unwrap();
-    let server_claims = decode_server_token(vault.public_refresh_certificate(), token)?;
+    let refresh_token_from_store = refresh_token_from_store.unwrap();
+
+    // Decode server side token
+    let public_certificate = vault.public_refresh_certificate();
+    let server_claims = decode_server_token(public_certificate, refresh_token_from_store.as_str())?;
+
+    // Restore user from server side token
+    let user_from_token = String::from_utf8_lossy(server_claims.sub()).to_string();
+
+    // Validate iat on client on server are same. If not, destroy the server claim and return error
     if server_claims.iat() != claims.iat() {
         let msg = format!("Client Refresh: {:?} Server Refresh: {}", claims.iat(), server_claims.iat());
         let reason = "iat does not match".to_string();
         vault.remove(reference).await;
         return Err(TokenErrors::InvalidServerRefreshToken(msg, reason).into());
     };
+
+    // Call hook
+    let _ = vault.check_same_user(user, user_from_token.as_str()).await?;
+
     Ok(server_claims)
 }
 
@@ -134,9 +146,16 @@ pub async fn continue_login<W, H, D>(vault: &mut W, user: &str, pass: &str, refr
     )?;
 
     // Prepare: Client Refresh Token
-    let client_refresh_token = prepare_client_refresh_token(
-        vault.private_refresh_certificate(), user, reference, iat, nbf, exp,
-    )?;
+    let client_refresh_token = if vault.trust_token_bearer() {
+        prepare_client_refresh_token(
+            vault.private_refresh_certificate(), user, reference, iat, nbf, exp,
+        )
+    } else {
+        let u = Vec::<u8>::new();
+        prepare_client_refresh_token(
+            vault.private_refresh_certificate(), u.as_slice(), reference, iat, nbf, exp,
+        )
+    }?;
 
     // Prepare: Client Authentication Token
     let exp = compute_authentication_token_expiry(Some(iat), authentication_token_expiry_in_seconds);
