@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 
 
-
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
 
@@ -18,6 +17,29 @@ pub struct DefaultVault {
     trust_token_bearer: bool,
     store: HashMap<u64, String>,
     users: HashMap<String, String>,
+}
+
+
+impl DefaultVault {
+    pub fn new<T: Keys>(loader: T, users: HashMap<String, String>, trust_token_bearer: bool) -> Self {
+        let public_authentication_certificate = loader.public_authentication_certificate().clone();
+        let private_authentication_certificate = loader.private_authentication_certificate().clone();
+        let public_refresh_certificate = loader.public_refresh_certificate().clone();
+        let private_refresh_certificate = loader.private_refresh_certificate().clone();
+        let password_hashing_secret = loader.password_hashing_secret().clone();
+        let store = HashMap::new();
+
+        Self {
+            public_authentication_certificate,
+            private_authentication_certificate,
+            public_refresh_certificate,
+            private_refresh_certificate,
+            password_hashing_secret,
+            trust_token_bearer,
+            store,
+            users,
+        }
+    }
 }
 
 impl PersistenceHasher<DefaultHasher> for DefaultVault {}
@@ -74,28 +96,6 @@ impl Store for DefaultVault {
 
     fn password_hashing_secret(&self) -> &PrivateKey {
         &self.password_hashing_secret
-    }
-}
-
-impl DefaultVault {
-    pub fn new<T: Keys>(loader: T, users: HashMap<String, String>, trust_token_bearer: bool) -> Self {
-        let public_authentication_certificate = loader.public_authentication_certificate().clone();
-        let private_authentication_certificate = loader.private_authentication_certificate().clone();
-        let public_refresh_certificate = loader.public_refresh_certificate().clone();
-        let private_refresh_certificate = loader.private_refresh_certificate().clone();
-        let password_hashing_secret = loader.password_hashing_secret().clone();
-        let store = HashMap::new();
-
-        Self {
-            public_authentication_certificate,
-            private_authentication_certificate,
-            public_refresh_certificate,
-            private_refresh_certificate,
-            password_hashing_secret,
-            trust_token_bearer,
-            store,
-            users,
-        }
     }
 }
 
@@ -538,6 +538,196 @@ mod tests {
             resolve_session_from_client_refresh_token(
                 &mut vault, user_john, &token.refresh(),
             )
+        );
+        assert!(result.is_err());
+    }
+
+
+    #[test]
+    fn test_cross_feeding_not_allowed() {
+        let certificate = CertificateManger::default();
+        // User: John Doe
+        let user_john = "john_doe";
+        let password_for_john = "john";
+        // Save value 'hashed_password_for_john' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+
+        // User: Jane Doe
+        let user_jane = "jane_doe";
+        let password_for_jane = "jane";
+        // Save 'hashed_password_for_jane' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+
+        let mut users = HashMap::new();
+
+        // load users and their password from database/somewhere
+        users.insert(user_john.to_string(), hashed_password_for_john.to_string());
+        users.insert(user_jane.to_string(), hashed_password_for_jane.to_string());
+
+        // Initialize vault
+        let mut vault = DefaultVault::new(certificate, users, false);
+
+        // Login: John Doe
+        let result = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        );
+
+        let token_for_john = result.ok().unwrap();
+
+        // Login: Jane Doe
+        let result = block_on(
+            vault.login(
+                user_jane,
+                password_for_jane,
+                None,
+                None)
+        );
+
+        let token_for_jane = result.ok().unwrap();
+
+        let result = block_on(
+            resolve_session_from_client_refresh_token(
+                &mut vault, user_john, token_for_jane.authentication(),
+            )
+        );
+        assert!(result.is_err());
+
+        let result = block_on(
+            resolve_session_from_client_refresh_token(
+                &mut vault, user_jane, token_for_john.authentication(),
+            )
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_new_refresh_invalidates_old_refresh() {
+        let certificate = CertificateManger::default();
+        // User: John Doe
+        let user_john = "john_doe";
+        let password_for_john = "john";
+        // Save value 'hashed_password_for_john' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+
+        // User: Jane Doe
+        let user_jane = "jane_doe";
+        let password_for_jane = "jane";
+        // Save 'hashed_password_for_jane' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+
+        let mut users = HashMap::new();
+
+        // load users and their password from database/somewhere
+        users.insert(user_john.to_string(), hashed_password_for_john.to_string());
+        users.insert(user_jane.to_string(), hashed_password_for_jane.to_string());
+
+        // Initialize vault
+        let mut vault = DefaultVault::new(certificate, users, false);
+
+        // Login: John Doe
+        let result = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        );
+        let token_for_john = result.ok().unwrap();
+
+        let johns_refresh_token = token_for_john.refresh();
+
+        let result = block_on(
+            resolve_session_from_client_refresh_token(&mut vault, user_john, johns_refresh_token)
+        );
+        assert!(result.is_ok());
+
+        let result = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        );
+        let new_token_for_john = result.ok().unwrap();
+        let johns_new_refresh_token = new_token_for_john.refresh();
+
+        let result = block_on(
+            resolve_session_from_client_refresh_token(&mut vault, user_john, johns_new_refresh_token)
+        );
+        assert!(result.is_ok());
+        let result = block_on(
+            resolve_session_from_client_refresh_token(&mut vault, user_john, johns_refresh_token)
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_new_authentication_invalidates_old_authentication() {
+        let certificate = CertificateManger::default();
+        // User: John Doe
+        let user_john = "john_doe";
+        let password_for_john = "john";
+        // Save value 'hashed_password_for_john' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+
+        // User: Jane Doe
+        let user_jane = "jane_doe";
+        let password_for_jane = "jane";
+        // Save 'hashed_password_for_jane' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+
+        let mut users = HashMap::new();
+
+        // load users and their password from database/somewhere
+        users.insert(user_john.to_string(), hashed_password_for_john.to_string());
+        users.insert(user_jane.to_string(), hashed_password_for_jane.to_string());
+
+        // Initialize vault
+        let mut vault = DefaultVault::new(certificate, users, false);
+
+        // Login: John Doe
+        let result = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        );
+        let token_for_john = result.ok().unwrap();
+
+        let johns_authentication_token = token_for_john.authentication();
+
+        let result = block_on(
+            resolve_session_from_client_authentication_token(&mut vault, user_john, johns_authentication_token)
+        );
+        assert!(result.is_ok());
+
+        let result = block_on(
+            vault.login(
+                user_john,
+                password_for_john,
+                None,
+                None)
+        );
+        let new_token_for_john = result.ok().unwrap();
+        let johns_new_authentication_token = new_token_for_john.authentication();
+
+        let result = block_on(
+            resolve_session_from_client_authentication_token(&mut vault, user_john, johns_new_authentication_token)
+        );
+        assert!(result.is_ok());
+        let result = block_on(
+            resolve_session_from_client_refresh_token(&mut vault, user_john, johns_authentication_token)
         );
         assert!(result.is_err());
     }
