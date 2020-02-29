@@ -1,7 +1,7 @@
 use crate::prelude::*;
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
-use argonautica::Hasher;
+
 
 
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
@@ -30,7 +30,7 @@ impl TrustToken for DefaultVault {
 }
 
 
-impl PasswordHasher<Hasher<'static>> for DefaultVault {
+impl PasswordHasher<ArgonHasher<'static>> for DefaultVault {
     fn hash_user_password<T: AsRef<str>>(&self, user: T, password: T) -> Result<String, Error> {
         let secret_key = self.password_hashing_secret.as_str();
         let result = hash_password_with_argon(password.as_ref(), secret_key.as_ref()).map_err(|e| {
@@ -155,7 +155,7 @@ impl UserAuthentication for DefaultVault {
 
 
 #[async_trait]
-impl Workflow<DefaultHasher, Hasher<'static>> for DefaultVault {
+impl Workflow<DefaultHasher, ArgonHasher<'static>> for DefaultVault {
     async fn login(&mut self, user: &str, pass: &str, authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error> {
         continue_login(self, user, pass, authentication_token_expiry_in_seconds, refresh_token_expiry_in_seconds).await
     }
