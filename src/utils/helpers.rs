@@ -6,7 +6,7 @@ use std::hash::Hasher;
 use futures::executor::LocalPool;
 use futures::Future;
 use crate::prelude::*;
-use argonautica::{Hasher as ArgonHasher, Verifier};
+
 
 pub fn load_file_from_disk(path: &str) -> Result<Vec<u8>, Error>
 {
@@ -76,7 +76,7 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
     pool.run_until(f)
 }
 
-pub fn hash_password_with_argon<T: AsRef<str>>(password: T, secret_key: T) -> Result<String, argonautica::Error> {
+pub fn hash_password_with_argon<T: AsRef<str>>(password: T, secret_key: T) -> Result<String, ArgonError> {
     let mut hasher = ArgonHasher::default();
     let secret_key = secret_key.as_ref();
     hasher.with_password(password.as_ref())
@@ -84,8 +84,8 @@ pub fn hash_password_with_argon<T: AsRef<str>>(password: T, secret_key: T) -> Re
         .hash()
 }
 
-pub fn verify_user_password_with_argon<T: AsRef<str>>(password: T, secret_key: T, hash: T) -> Result<bool, argonautica::Error> {
-    let mut verifier = Verifier::default();
+pub fn verify_user_password_with_argon<T: AsRef<str>>(password: T, secret_key: T, hash: T) -> Result<bool, ArgonError> {
+    let mut verifier = ArgonVerifier::default();
     let secret_key = secret_key.as_ref();
     verifier.with_hash(hash.as_ref())
         .with_password(password.as_ref())

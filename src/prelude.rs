@@ -1,6 +1,9 @@
 pub use failure::Error;
 
 pub use async_trait::async_trait;
+pub use argonautica::{Hasher as ArgonHasher, Verifier as ArgonVerifier, Error as ArgonError};
+
+
 
 pub use crate::api::certificates::{Store, Keys, PublicKey, PrivateKey};
 pub use crate::api::session::{Session, Token};
