@@ -34,7 +34,7 @@
 * Easy start
 * No un-safe code
 * Runs on stable rust
-* Uses [Argon2](https://en.wikipedia.org/wiki/Argon2) (see [video](https://www.youtube.com/watch?v=Sc3aHMCc4h0&t=339s))
+* Uses [Argon](https://en.wikipedia.org/wiki/Argon2) (see [video](https://www.youtube.com/watch?v=Sc3aHMCc4h0&t=339s))
 * Library approach (Requires no runtime)
 * Supports plugable components
 * Invalidates old refresh upon new refresh token renewal
