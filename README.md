@@ -11,6 +11,7 @@
 ![Crates.io](https://img.shields.io/crates/v/jwtvault)
 ![Crates.io](https://img.shields.io/crates/d/jwtvault)
 ![Contributors](https://img.shields.io/github/contributors/sgrust01/jwtvault)
+[![Gitter](https://badges.gitter.im/jwtvault/community.svg)](https://gitter.im/jwtvault/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 </p>
 
   <h3>
@@ -18,7 +19,7 @@
     <span> | </span>
     <a href="#">Website</a>
     <span> | </span>
-    <a href="#">Chat</a>
+    <a href="https://gitter.im/jwtvault/community?utm_source=share-link&utm_medium=link&utm_campaign=share-link">Chat</a>
   </h3>
 </div>
 
@@ -39,6 +40,10 @@
 * Invalidates old authentication upon new authentication token renewal
 * Handles Thundering herd problem upon authentication token expiry
 * Works with any web-server, any password hashing, and any backend ([here](https://github.com/sgrust01/jwtvault_examples))
+* Fully functional 
+[webserver](https://github.com/sgrust01/jwtvault_examples#example-5-webserver) 
+with [actix](https://github.com/actix/actix) 
+and [postgres](https://github.com/sfackler/rust-postgres/tree/master/tokio-postgres)
 
 
 ## Quickstart
