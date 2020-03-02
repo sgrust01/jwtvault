@@ -38,6 +38,7 @@
 * Supports plugable components
 * Invalidates old refresh upon new refresh token renewal
 * Invalidates old authentication upon new authentication token renewal
+* Cross feeding not allowed
 * Handles Thundering herd problem upon authentication token expiry
 * Works with any web-server, any password hashing, and any backend ([here](https://github.com/sgrust01/jwtvault_examples))
 * Fully functional 
