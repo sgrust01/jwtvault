@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use std::default::Default;
 use std::ops::{Deref, DerefMut};
 use std::collections::hash_map::DefaultHasher;
-
-
+use std::convert::From;
 
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
@@ -15,11 +14,13 @@ pub struct DynamicVault {
     private_authentication_certificate: PrivateKey,
     public_refresh_certificate: PublicKey,
     private_refresh_certificate: PrivateKey,
-    password_hashing_secret: PrivateKey,
+    password_hasher: ArgonPasswordHasher,
     trust_token_bearer: bool,
     store: HashMap<u64, String>,
     user_authentication: Box<dyn UserAuthentication + Send + Sync>,
     user_identity: Box<dyn UserIdentity + Send + Sync>,
+    password_hashing_secret: PrivateKey,
+
 }
 
 struct DefaultIdentity;
@@ -40,31 +41,16 @@ impl DynamicVault {
     pub fn default(user_authentication: Box<dyn UserAuthentication + Send + Sync>) -> Self {
         let loader = CertificateManger::default();
         let trust_token_bearer = false;
-        let public_authentication_certificate = loader.public_authentication_certificate().clone();
-        let private_authentication_certificate = loader.private_authentication_certificate().clone();
-        let public_refresh_certificate = loader.public_refresh_certificate().clone();
-        let private_refresh_certificate = loader.private_refresh_certificate().clone();
-        let password_hashing_secret = loader.password_hashing_secret().clone();
-        let store = HashMap::new();
         let user_identity = Box::new(DefaultIdentity);
-        Self {
-            public_authentication_certificate,
-            private_authentication_certificate,
-            public_refresh_certificate,
-            private_refresh_certificate,
-            password_hashing_secret,
-            trust_token_bearer,
-            store,
-            user_authentication,
-            user_identity,
-        }
+        Self::new(loader, trust_token_bearer, user_authentication, user_identity)
     }
     pub fn new<T: Keys>(loader: T, trust_token_bearer: bool, user_authentication: Box<dyn UserAuthentication + Send + Sync>, user_identity: Box<dyn UserIdentity + Send + Sync>) -> Self {
         let public_authentication_certificate = loader.public_authentication_certificate().clone();
         let private_authentication_certificate = loader.private_authentication_certificate().clone();
         let public_refresh_certificate = loader.public_refresh_certificate().clone();
         let private_refresh_certificate = loader.private_refresh_certificate().clone();
-        let password_hashing_secret = loader.password_hashing_secret().clone();
+        let password_hashing_secret = loader.password_hashing_secret();
+        let password_hasher = ArgonPasswordHasher::from(password_hashing_secret.clone());
         let store = HashMap::new();
 
         Self {
@@ -72,11 +58,12 @@ impl DynamicVault {
             private_authentication_certificate,
             public_refresh_certificate,
             private_refresh_certificate,
-            password_hashing_secret,
+            password_hasher,
             trust_token_bearer,
             store,
             user_authentication,
             user_identity,
+            password_hashing_secret,
         }
     }
 }
@@ -91,28 +78,12 @@ impl TrustToken for DynamicVault {
 }
 
 
-impl PasswordHasher<ArgonHasher<'static>> for DynamicVault {
+impl<'a> PasswordHasher<ArgonHasher<'a>> for DynamicVault {
     fn hash_user_password<T: AsRef<str>>(&self, user: T, password: T) -> Result<String, Error> {
-        let secret_key = self.password_hashing_secret.as_str();
-        let result = hash_password_with_argon(password.as_ref(), secret_key.as_ref()).map_err(|e| {
-            let msg = format!("Login failed for user: {}", user.as_ref());
-            let reason = e.to_string();
-            LoginFailed::PasswordHashingFailed(msg, reason).into()
-        });
-
-        result
+        self.password_hasher.hash_user_password(user, password)
     }
     fn verify_user_password<T: AsRef<str>>(&self, user: T, password: T, hash: T) -> Result<bool, Error> {
-        let secret_key = self.password_hashing_secret.as_str();
-        let result = verify_user_password_with_argon(
-            password.as_ref(), secret_key.as_ref(), hash.as_ref(),
-        ).map_err(|e| {
-            let reason = e.to_string();
-            let msg = format!("Login verification for user: {} Reason: {}", user.as_ref(), reason);
-            let reason = e.to_string();
-            LoginFailed::PasswordVerificationFailed(msg, reason).into()
-        });
-        result
+        self.password_hasher.verify_user_password(user, password, hash)
     }
 }
 
@@ -217,9 +188,6 @@ impl LoginInfo {
             hasher,
         }
     }
-    fn verify_user_password<T: AsRef<str>>(&self, user: T, password: T, hash: T) -> Result<bool, Error> {
-        self.hasher.verify_user_password(user, password, hash)
-    }
 }
 
 
@@ -234,7 +202,7 @@ impl UserAuthentication for LoginInfo {
             return Err(LoginFailed::InvalidPassword(msg, reason).into());
         };
         let password_from_disk = password_from_disk.unwrap();
-        let result = self.verify_user_password(user, password, password_from_disk)?;
+        let result = self.hasher.verify_user_password(user, password, password_from_disk)?;
         if !result {
             let msg = "Login Failed".to_string();
             let reason = "Invalid userid/password".to_string();
@@ -258,22 +226,22 @@ mod tests {
     #[test]
     fn test_trusted_token_bearer_workflow() {
         let loader = CertificateManger::default();
-        let secret_key = loader.password_hashing_secret().clone();
         let user_identity = Box::new(DefaultIdentity);
+        let hasher = ArgonPasswordHasher::default();
 
         // User: John Doe
         let user_john = "john_doe";
         let password_for_john = "john";
         // Save value 'hashed_password_for_john' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_john = hash_password_with_argon(password_for_john, &secret_key).unwrap();
+        let hashed_password_for_john = hasher.hash_user_password(user_john, password_for_john).unwrap();
 
         // User: Jane Doe
         let user_jane = "jane_doe";
         let password_for_jane = "jane";
         // Save 'hashed_password_for_jane' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, &secret_key).unwrap();
+        let hashed_password_for_jane = hasher.hash_user_password(user_jane, password_for_jane).unwrap();
 
         let mut users = HashMap::new();
 
@@ -441,21 +409,20 @@ mod tests {
 
     #[test]
     fn test_untrusted_token_bearer_workflow() {
-        let certificate = CertificateManger::default();
-
+        let hasher = ArgonPasswordHasher::default();
         // User: John Doe
         let user_john = "john_doe";
         let password_for_john = "john";
         // Save value 'hashed_password_for_john' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_john = hasher.hash_user_password(user_john, password_for_john).unwrap();
 
         // User: Jane Doe
         let user_jane = "jane_doe";
         let password_for_jane = "jane";
         // Save 'hashed_password_for_jane' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_jane = hasher.hash_user_password(user_jane, password_for_jane).unwrap();
 
         let mut users = HashMap::new();
 
@@ -629,20 +596,20 @@ mod tests {
 
     #[test]
     fn test_cross_feeding_not_allowed() {
-        let certificate = CertificateManger::default();
+        let hasher = ArgonPasswordHasher::default();
         // User: John Doe
         let user_john = "john_doe";
         let password_for_john = "john";
         // Save value 'hashed_password_for_john' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_john = hasher.hash_user_password(user_john, password_for_john).unwrap();
 
         // User: Jane Doe
         let user_jane = "jane_doe";
         let password_for_jane = "jane";
         // Save 'hashed_password_for_jane' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_jane = hasher.hash_user_password(user_jane, password_for_jane).unwrap();
 
         let mut users = HashMap::new();
 
@@ -696,20 +663,20 @@ mod tests {
 
     #[test]
     fn test_new_refresh_invalidates_old_refresh() {
-        let certificate = CertificateManger::default();
+        let hasher = ArgonPasswordHasher::default();
         // User: John Doe
         let user_john = "john_doe";
         let password_for_john = "john";
         // Save value 'hashed_password_for_john' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_john = hasher.hash_user_password(user_john, password_for_john).unwrap();
 
         // User: Jane Doe
         let user_jane = "jane_doe";
         let password_for_jane = "jane";
         // Save 'hashed_password_for_jane' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_jane = hasher.hash_user_password(user_jane, password_for_jane).unwrap();
 
         let mut users = HashMap::new();
 
@@ -762,20 +729,20 @@ mod tests {
 
     #[test]
     fn test_new_authentication_invalidates_old_authentication() {
-        let certificate = CertificateManger::default();
+        let hasher = ArgonPasswordHasher::default();
         // User: John Doe
         let user_john = "john_doe";
         let password_for_john = "john";
         // Save value 'hashed_password_for_john' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_john = hasher.hash_user_password(user_john, password_for_john).unwrap();
 
         // User: Jane Doe
         let user_jane = "jane_doe";
         let password_for_jane = "jane";
         // Save 'hashed_password_for_jane' to persistent storage
         // This is more relevant during user signup/password reset
-        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+        let hashed_password_for_jane = hasher.hash_user_password(user_jane, password_for_jane).unwrap();
 
         let mut users = HashMap::new();
 
