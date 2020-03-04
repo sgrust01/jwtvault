@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 use crate::prelude::*;
 
-pub struct ArgonPasswordHasher{
+pub struct ArgonPasswordHasher {
     secret_key: String
 }
 
@@ -17,6 +17,14 @@ impl ArgonPasswordHasher {
     pub fn new<T: AsRef<str>>(secret_key: T) -> Self {
         let secret_key = secret_key.as_ref().to_string();
         Self { secret_key }
+    }
+}
+
+impl Default for ArgonPasswordHasher {
+    fn default() -> Self {
+        let manager = CertificateManger::default();
+        let secret_key = manager.password_hashing_secret();
+        ArgonPasswordHasher::from(secret_key)
     }
 }
 
@@ -41,5 +49,11 @@ impl<'a> PasswordHasher<ArgonHasher<'a>> for ArgonPasswordHasher {
             LoginFailed::PasswordVerificationFailed(msg, reason).into()
         });
         result
+    }
+}
+
+impl From<PrivateKey> for ArgonPasswordHasher {
+    fn from(secret_key: PrivateKey) -> Self {
+        ArgonPasswordHasher::new(secret_key.as_str())
     }
 }
