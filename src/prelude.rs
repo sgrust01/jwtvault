@@ -4,7 +4,6 @@ pub use async_trait::async_trait;
 pub use argonautica::{Hasher as ArgonHasher, Verifier as ArgonVerifier, Error as ArgonError};
 
 
-
 pub use crate::api::certificates::{Store, Keys, PublicKey, PrivateKey};
 pub use crate::api::session::{Session, Token};
 pub use crate::api::persistence::{Persistence, PersistenceHasher};
@@ -12,6 +11,8 @@ pub use crate::api::vault::{UserIdentity, UserAuthentication, PasswordHasher, Wo
 
 pub use crate::errors::{CertificateError, TokenErrors, LoginFailed};
 
+pub use crate::utils::password::ArgonPasswordHasher;
+pub use crate::utils::dynamic::DynamicVault;
 pub use crate::utils::certificates::CertificateManger;
 pub use crate::utils::vault::DefaultVault;
 pub use crate::utils::helpers::{load_file_from_disk, compute_timestamp_in_seconds, compute_refresh_token_expiry, compute_authentication_token_expiry, block_on, hash_password_with_argon, verify_user_password_with_argon};

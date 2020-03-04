@@ -5,6 +5,7 @@ use std::ops::{Deref, DerefMut};
 use std::collections::hash_map::DefaultHasher;
 
 
+
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
 
@@ -191,7 +192,7 @@ impl Workflow<DefaultHasher, ArgonHasher<'static>> for DynamicVault {
 
 pub struct LoginInfo {
     users: HashMap<String, String>,
-    secret_key: PrivateKey,
+    hasher: ArgonPasswordHasher,
 }
 
 impl Deref for LoginInfo {
@@ -210,24 +211,14 @@ impl DerefMut for LoginInfo {
 
 impl LoginInfo {
     pub fn new(users: HashMap<String, String>) -> Self {
-        let loader = CertificateManger::default();
-        let secret_key = loader.password_hashing_secret().clone();
+        let hasher = ArgonPasswordHasher::default();
         Self {
             users,
-            secret_key,
+            hasher,
         }
     }
     fn verify_user_password<T: AsRef<str>>(&self, user: T, password: T, hash: T) -> Result<bool, Error> {
-        let secret_key = self.secret_key.as_str();
-        let result = verify_user_password_with_argon(
-            password.as_ref(), secret_key, hash.as_ref(),
-        ).map_err(|e| {
-            let reason = e.to_string();
-            let msg = format!("Login verification for user: {} Reason: {}", user.as_ref(), reason);
-            let reason = e.to_string();
-            LoginFailed::PasswordVerificationFailed(msg, reason).into()
-        });
-        result
+        self.hasher.verify_user_password(user, password, hash)
     }
 }
 
