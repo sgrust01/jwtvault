@@ -4,3 +4,4 @@ pub mod digestors;
 pub mod vault;
 pub mod certificates;
 pub mod dynamic;
+pub mod password;
