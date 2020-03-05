@@ -139,7 +139,7 @@ impl UserAuthentication for DefaultVault {
 
 
 #[async_trait]
-impl Workflow<DefaultHasher, ArgonHasher<'static>> for DefaultVault {
+impl<'a> Workflow<DefaultHasher, ArgonHasher<'a>> for DefaultVault {
     async fn login(&mut self, user: &str, pass: &str, authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error> {
         continue_login(self, user, pass, authentication_token_expiry_in_seconds, refresh_token_expiry_in_seconds).await
     }
