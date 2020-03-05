@@ -11,7 +11,6 @@ pub trait Store {
     fn private_authentication_certificate(&self) -> &PrivateKey;
     fn public_refresh_certificate(&self) -> &PublicKey;
     fn private_refresh_certificate(&self) -> &PrivateKey;
-    fn password_hashing_secret(&self) -> &PrivateKey;
 }
 
 pub trait Keys {

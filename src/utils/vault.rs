@@ -7,13 +7,12 @@ use std::collections::hash_map::DefaultHasher;
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
 
 
-#[derive(Debug, Clone, PartialEq)]
 pub struct DefaultVault {
     public_authentication_certificate: PublicKey,
     private_authentication_certificate: PrivateKey,
     public_refresh_certificate: PublicKey,
     private_refresh_certificate: PrivateKey,
-    password_hashing_secret: PrivateKey,
+    password_hasher: ArgonPasswordHasher,
     trust_token_bearer: bool,
     store: HashMap<u64, String>,
     users: HashMap<String, String>,
@@ -26,7 +25,10 @@ impl DefaultVault {
         let private_authentication_certificate = loader.private_authentication_certificate().clone();
         let public_refresh_certificate = loader.public_refresh_certificate().clone();
         let private_refresh_certificate = loader.private_refresh_certificate().clone();
-        let password_hashing_secret = loader.password_hashing_secret().clone();
+        let secret_key = loader.password_hashing_secret();
+
+        let password_hasher = ArgonPasswordHasher::new(secret_key.as_str());
+
         let store = HashMap::new();
 
         Self {
@@ -34,7 +36,7 @@ impl DefaultVault {
             private_authentication_certificate,
             public_refresh_certificate,
             private_refresh_certificate,
-            password_hashing_secret,
+            password_hasher,
             trust_token_bearer,
             store,
             users,
@@ -52,28 +54,12 @@ impl TrustToken for DefaultVault {
 }
 
 
-impl PasswordHasher<ArgonHasher<'static>> for DefaultVault {
+impl<'a> PasswordHasher<ArgonHasher<'a>> for DefaultVault {
     fn hash_user_password<T: AsRef<str>>(&self, user: T, password: T) -> Result<String, Error> {
-        let secret_key = self.password_hashing_secret.as_str();
-        let result = hash_password_with_argon(password.as_ref(), secret_key.as_ref()).map_err(|e| {
-            let msg = format!("Login failed for user: {}", user.as_ref());
-            let reason = e.to_string();
-            LoginFailed::PasswordHashingFailed(msg, reason).into()
-        });
-
-        result
+        self.password_hasher.hash_user_password(user, password)
     }
     fn verify_user_password<T: AsRef<str>>(&self, user: T, password: T, hash: T) -> Result<bool, Error> {
-        let secret_key = self.password_hashing_secret.as_str();
-        let result = verify_user_password_with_argon(
-            password.as_ref(), secret_key.as_ref(), hash.as_ref(),
-        ).map_err(|e| {
-            let reason = e.to_string();
-            let msg = format!("Login verification for user: {} Reason: {}", user.as_ref(), reason);
-            let reason = e.to_string();
-            LoginFailed::PasswordVerificationFailed(msg, reason).into()
-        });
-        result
+        self.password_hasher.verify_user_password(user, password, hash)
     }
 }
 
@@ -94,9 +80,7 @@ impl Store for DefaultVault {
         &self.private_refresh_certificate
     }
 
-    fn password_hashing_secret(&self) -> &PrivateKey {
-        &self.password_hashing_secret
-    }
+
 }
 
 

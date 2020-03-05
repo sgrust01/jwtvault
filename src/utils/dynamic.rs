@@ -19,7 +19,7 @@ pub struct DynamicVault {
     store: HashMap<u64, String>,
     user_authentication: Box<dyn UserAuthentication + Send + Sync>,
     user_identity: Box<dyn UserIdentity + Send + Sync>,
-    password_hashing_secret: PrivateKey,
+
 
 }
 
@@ -63,7 +63,6 @@ impl DynamicVault {
             store,
             user_authentication,
             user_identity,
-            password_hashing_secret,
         }
     }
 }
@@ -104,9 +103,7 @@ impl Store for DynamicVault {
         &self.private_refresh_certificate
     }
 
-    fn password_hashing_secret(&self) -> &PrivateKey {
-        &self.password_hashing_secret
-    }
+
 }
 
 
