@@ -8,19 +8,14 @@ use std::convert::From;
 //pub async fn execute<H, E, F>(user: &[u8], token: &str, engine: &mut E, check_same_user: impl Fn(&[u8], &str) -> F) -> Result<ServerClaims, Error>
 //    where F: Future<Output=Result<(), Error>>, H: Default + Hasher, E: Store + UserIdentity + UserAuthentication + PersistenceHasher<H> + Persistence {
 
-
+/// Uses dynamic dispatch
 pub struct DynamicVault {
-    public_authentication_certificate: PublicKey,
-    private_authentication_certificate: PrivateKey,
-    public_refresh_certificate: PublicKey,
-    private_refresh_certificate: PrivateKey,
-    password_hasher: ArgonPasswordHasher,
     trust_token_bearer: bool,
-    store: HashMap<u64, String>,
     user_authentication: Box<dyn UserAuthentication + Send + Sync>,
     user_identity: Box<dyn UserIdentity + Send + Sync>,
-
-
+    certificate_store: CertificateStore,
+    password_hasher: ArgonPasswordHasher,
+    store: HashMap<u64, String>,
 }
 
 struct DefaultIdentity;
@@ -45,24 +40,18 @@ impl DynamicVault {
         Self::new(loader, trust_token_bearer, user_authentication, user_identity)
     }
     pub fn new<T: Keys>(loader: T, trust_token_bearer: bool, user_authentication: Box<dyn UserAuthentication + Send + Sync>, user_identity: Box<dyn UserIdentity + Send + Sync>) -> Self {
-        let public_authentication_certificate = loader.public_authentication_certificate().clone();
-        let private_authentication_certificate = loader.private_authentication_certificate().clone();
-        let public_refresh_certificate = loader.public_refresh_certificate().clone();
-        let private_refresh_certificate = loader.private_refresh_certificate().clone();
         let password_hashing_secret = loader.password_hashing_secret();
+        let certificate_store = CertificateStore::from(loader);
         let password_hasher = ArgonPasswordHasher::from(password_hashing_secret.clone());
         let store = HashMap::new();
 
         Self {
-            public_authentication_certificate,
-            private_authentication_certificate,
-            public_refresh_certificate,
-            private_refresh_certificate,
-            password_hasher,
             trust_token_bearer,
-            store,
             user_authentication,
             user_identity,
+            certificate_store,
+            password_hasher,
+            store,
         }
     }
 }
@@ -76,8 +65,7 @@ impl TrustToken for DynamicVault {
     }
 }
 
-
-impl<'a> PasswordHasher<ArgonHasher<'a>> for DynamicVault {
+impl PasswordHasher<ArgonPasswordHasher> for DynamicVault {
     fn hash_user_password<T: AsRef<str>>(&self, user: T, password: T) -> Result<String, Error> {
         self.password_hasher.hash_user_password(user, password)
     }
@@ -88,22 +76,20 @@ impl<'a> PasswordHasher<ArgonHasher<'a>> for DynamicVault {
 
 impl Store for DynamicVault {
     fn public_authentication_certificate(&self) -> &PublicKey {
-        &self.public_authentication_certificate
+        self.certificate_store.public_authentication_certificate()
     }
 
     fn private_authentication_certificate(&self) -> &PrivateKey {
-        &self.private_authentication_certificate
+        self.certificate_store.private_authentication_certificate()
     }
 
     fn public_refresh_certificate(&self) -> &PublicKey {
-        &self.public_refresh_certificate
+        self.certificate_store.public_refresh_certificate()
     }
 
     fn private_refresh_certificate(&self) -> &PrivateKey {
-        &self.private_refresh_certificate
+        self.certificate_store.private_refresh_certificate()
     }
-
-
 }
 
 
@@ -140,7 +126,7 @@ impl UserAuthentication for DynamicVault {
 
 
 #[async_trait]
-impl Workflow<DefaultHasher, ArgonHasher<'static>> for DynamicVault {
+impl Workflow<DefaultHasher, ArgonPasswordHasher> for DynamicVault {
     async fn login(&mut self, user: &str, pass: &str, authentication_token_expiry_in_seconds: Option<i64>, refresh_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error> {
         continue_login(self, user, pass, authentication_token_expiry_in_seconds, refresh_token_expiry_in_seconds).await
     }
@@ -265,13 +251,13 @@ mod tests {
 
         // Decode client authentication token
         let client_claim = decode_client_token(
-            &vault.public_authentication_certificate, token.authentication(),
+            &vault.public_authentication_certificate(), token.authentication(),
         ).ok().unwrap();
         assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
 
         // Decode client refresh token
         let client_claim = decode_client_token(
-            &vault.public_refresh_certificate, token.refresh(),
+            &vault.public_refresh_certificate(), token.refresh(),
         ).ok().unwrap();
         assert_eq!(client_claim.sub().as_slice(), user_john.as_bytes());
 
@@ -296,7 +282,7 @@ mod tests {
 
         // Decode client token
         let new_client_claim = decode_client_token(
-            &vault.public_authentication_certificate, &new_auth_token,
+            &vault.public_authentication_certificate(), &new_auth_token,
         ).ok().unwrap();
         assert_eq!(new_client_claim.sub(), server_claims.sub());
 
@@ -446,14 +432,14 @@ mod tests {
 
         // Decode client authentication token
         let client_claim = decode_client_token(
-            &vault.public_authentication_certificate, token.authentication(),
+            &vault.public_authentication_certificate(), token.authentication(),
         ).ok().unwrap();
         let user_john_from_token = Vec::<u8>::new();
         assert_eq!(client_claim.sub().as_slice(), user_john_from_token.as_slice());
 
         // Decode client refresh token
         let client_claim = decode_client_token(
-            &vault.public_refresh_certificate, token.refresh(),
+            &vault.public_refresh_certificate(), token.refresh(),
         ).ok().unwrap();
         let user_john_from_token = Vec::<u8>::new();
         assert_eq!(client_claim.sub().as_slice(), user_john_from_token.as_slice());
@@ -480,7 +466,7 @@ mod tests {
 
         // Decode client token
         let new_client_claim = decode_client_token(
-            &vault.public_authentication_certificate, &new_auth_token,
+            &vault.public_authentication_certificate(), &new_auth_token,
         ).ok().unwrap();
         assert_eq!(new_client_claim.sub().as_slice(), user_john_from_token.as_slice());
         assert_eq!(user_john.as_bytes(), server_claims.sub().as_slice());
