@@ -18,7 +18,7 @@ pub struct DynamicVault {
     store: HashMap<u64, String>,
 }
 
-struct DefaultIdentity;
+pub struct DefaultIdentity;
 
 #[async_trait]
 impl UserIdentity for DefaultIdentity {
