@@ -1,5 +1,5 @@
-use crate::prelude::*;
 use crate::constants::DEFAULT_PASSWORD_HASHING_SECRET_PATH;
+use crate::prelude::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CertificateManger {
@@ -76,3 +76,82 @@ impl Keys for CertificateManger {
         PrivateKey::from(self.password_hashing_secret.clone())
     }
 }
+#[derive(Clone)]
+pub struct KeyPair {
+    public_certificate: PublicKey,
+    private_certificate: PrivateKey,
+}
+
+impl KeyPair {
+    pub fn new(public_certificate: PublicKey, private_certificate: PrivateKey) -> Self {
+        Self {
+            public_certificate,
+            private_certificate,
+        }
+    }
+    pub fn public_certificate(&self) -> &PublicKey {
+        &self.public_certificate
+    }
+    pub fn private_certificate(&self) -> &PrivateKey {
+        &self.private_certificate
+    }
+}
+
+#[derive(Clone)]
+pub struct CertificateStore {
+    authentication: KeyPair,
+    refresh: KeyPair,
+}
+
+impl CertificateStore {
+    pub fn new(authentication: KeyPair, refresh: KeyPair) -> Self {
+        Self {
+            authentication,
+            refresh,
+        }
+    }
+    pub fn authentication(&self) -> &KeyPair {
+        &self.authentication
+    }
+    pub fn refresh(&self) -> &KeyPair {
+        &self.refresh
+    }
+}
+
+
+impl Store for CertificateStore {
+    fn public_authentication_certificate(&self) -> &PublicKey {
+        self.authentication().public_certificate()
+    }
+    fn private_authentication_certificate(&self) -> &PrivateKey {
+        self.authentication().private_certificate()
+    }
+    fn public_refresh_certificate(&self) -> &PublicKey {
+        self.refresh().public_certificate()
+    }
+    fn private_refresh_certificate(&self) -> &PrivateKey {
+        self.refresh().private_certificate()
+    }
+}
+
+impl<T: Keys> From<T> for CertificateStore {
+    fn from(loader: T) -> Self {
+        let authentication = KeyPair::new(
+            loader.public_authentication_certificate().clone(),
+            loader.private_authentication_certificate().clone(),
+        );
+        let refresh = KeyPair::new(
+            loader.public_refresh_certificate().clone(),
+            loader.private_refresh_certificate().clone(),
+        );
+        CertificateStore::new(authentication, refresh)
+    }
+}
+
+impl Default for CertificateStore {
+    fn default() -> Self {
+        let manger = CertificateManger::default();
+        CertificateStore::from(manger)
+    }
+}
+
