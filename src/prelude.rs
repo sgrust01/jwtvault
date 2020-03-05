@@ -13,7 +13,7 @@ pub use crate::api::vault::{UserIdentity, UserAuthentication, Workflow, TrustTok
 pub use crate::errors::{CertificateError, TokenErrors, LoginFailed};
 
 pub use crate::utils::password::ArgonPasswordHasher;
-pub use crate::utils::dynamic::DynamicVault;
+pub use crate::utils::dynamic::{DynamicVault, LoginInfo, DefaultIdentity};
 pub use crate::utils::certificates::{CertificateManger, KeyPair, CertificateStore};
 pub use crate::utils::vault::DefaultVault;
 pub use crate::utils::helpers::{load_file_from_disk, compute_timestamp_in_seconds, compute_refresh_token_expiry, compute_authentication_token_expiry, block_on, hash_password_with_argon, verify_user_password_with_argon};
