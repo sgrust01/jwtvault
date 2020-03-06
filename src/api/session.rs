@@ -39,3 +39,8 @@ impl Session {
 }
 
 
+impl Default for Session {
+    fn default() -> Self {
+        Session::new(None, None)
+    }
+}
