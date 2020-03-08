@@ -4,6 +4,7 @@
   <p>
   
 [![Build Status](https://travis-ci.org/sgrust01/jwtvault.svg?branch=master)](https://travis-ci.org/sgrust01/jwtvault) 
+[![Build status](https://ci.appveyor.com/api/projects/status/x903r0kr9sivyus2?svg=true)](https://ci.appveyor.com/project/sgrust01/jwtvault)
 [![codecov](https://codecov.io/gh/sgrust01/jwtvault/branch/master/graph/badge.svg)](https://codecov.io/gh/sgrust01/jwtvault)
 [![Version](https://img.shields.io/badge/rustc-1.39+-blue.svg)](https://blog.rust-lang.org/2019/11/07/Rust-1.39.0.html) 
 ![RepoSize](https://img.shields.io/github/repo-size/sgrust01/jwtvault)
