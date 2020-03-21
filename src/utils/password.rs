@@ -57,3 +57,26 @@ impl From<PrivateKey> for ArgonPasswordHasher {
         ArgonPasswordHasher::new(secret_key.as_str())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_argon_password_hasher_for_empty_password() {
+        let manager = CertificateManger::default();
+        let secret = manager.password_hashing_secret();
+        let hasher = ArgonPasswordHasher::new(&secret.as_str());
+        let result = hasher.hash_user_password("ghost", "");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn validate_argon_password_hasher_for_invalid_hash() {
+        let manager = CertificateManger::default();
+        let secret = manager.password_hashing_secret();
+        let hasher = ArgonPasswordHasher::new(&secret.as_str());
+        let result = hasher.verify_user_password("user", "clean", "");
+        assert!(result.is_err())
+    }
+}
