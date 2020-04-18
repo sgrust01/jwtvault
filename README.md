@@ -262,7 +262,9 @@ fn main() {
     * Temporary token creates temporary session, and does not corrupt the original session info
     * Temporary token cannot be used to login/logout/renew/revoke original session
     * Temporary token does not have refresh key (this is intentional), to avoid token refresh
-    * __**Note:**__ DynamicVault users can directly use instance method `generate_temporary_token` 
+    * __**Note:**__ DynamicVault users can directly use instance method `generate_temporary_token`
+    * __**Typical use-case:**__ Forgot password
     
 * Use helper `resolve_temporary_session_from_client_authentication_token` to restore user temporary session
     * Temporary session are isolated instance and does has no fingerprints of the originals session
+    * __**Typical use-case:**__ Reset user password 
