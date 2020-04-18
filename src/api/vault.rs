@@ -123,7 +123,7 @@ pub async fn resolve_temporary_session_from_client_authentication_token<W, H, D>
     resolve_session_from_client_authentication_token::<W, H, D>(vault, &user, token).await
 }
 
-pub async fn continue_generate_temporary_authentication_token<W, H, D>(vault: &mut W, user: &str, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+pub async fn continue_generate_temporary_token<W, H, D>(vault: &mut W, user: &str, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
     where H: Hasher + Default, D: Default, W: Workflow<H, D>
 {
     let authentication_token_expiry_in_seconds = Some(compute_temporary_authentication_token_expiry(None, authentication_token_expiry_in_seconds));
