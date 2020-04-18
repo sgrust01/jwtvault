@@ -258,3 +258,11 @@ fn main() {
 
 * Use `logout` with ___***user***___ and ___***authentication_token***___ will remove all tokens associated with the user
 
+* Use helper `continue_generate_temporary_token` to generate temporary token for user
+    * Temporary token creates temporary session, and does not corrupt the original session info
+    * Temporary token cannot be used to login/logout/renew/revoke original session
+    * Temporary token does not have refresh key (this is intentional), to avoid token refresh
+    * __**Note:**__ DynamicVault users can directly use instance method `generate_temporary_token` 
+    
+* Use helper `resolve_temporary_session_from_client_authentication_token` to restore user temporary session
+    * Temporary session are isolated instance and does has no fingerprints of the originals session
