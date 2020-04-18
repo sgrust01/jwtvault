@@ -1,10 +1,14 @@
 use std::fs::File;
 use std::io::Read;
+use std::{thread::sleep, time::Duration, time::Instant};
+use std::hash::Hasher;
+
 use rand::Rng;
 use chrono::Utc;
-use std::hash::Hasher;
-use futures::executor::LocalPool;
+
 use futures::Future;
+use futures::executor::LocalPool;
+
 use crate::prelude::*;
 
 
@@ -63,11 +67,34 @@ pub fn compute_refresh_token_expiry(since_epoch_in_seconds: Option<i64>, expiry_
     }
 }
 
+
+/// Compute the expiry of the temporary refresh token
+/// Default: 10 minutes
+pub fn compute_temporary_authentication_token_expiry(since_epoch_in_seconds: Option<i64>, expiry_in_seconds: Option<i64>) -> i64 {
+    let since_epoch_in_seconds = match since_epoch_in_seconds {
+        Some(n) => n,
+        None => Utc::now().timestamp()
+    };
+
+    match expiry_in_seconds {
+        Some(n) => since_epoch_in_seconds + n,
+        None => DEFAULT_TEMPORARY_AUTHENTICATION_EXPIRY_IN_SECONDS
+    }
+}
+
 pub fn digest<H: Hasher, T: AsRef<[u8]>>(hasher: &mut H, payload: T) -> u64 {
     for i in payload.as_ref() {
         hasher.write_u8(*i);
     };
     hasher.finish()
+}
+
+pub fn block_thread(sleep_in_seconds: u64) -> u64 {
+    let duration = Duration::from_secs(sleep_in_seconds);
+    let now = Instant::now();
+    sleep(duration);
+    let result = Instant::now() - now;
+    result.as_secs()
 }
 
 
@@ -193,5 +220,12 @@ mod tests {
         let result = verify_user_password_with_argon(plain_password, &secret_key, &some_other_hash).unwrap();
 
         assert!(!result);
+    }
+
+    #[test]
+    fn validate_block_thread() {
+        let sleep = 1;
+        let result = block_thread(sleep);
+        assert!(result >= sleep);
     }
 }
