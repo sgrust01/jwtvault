@@ -79,8 +79,6 @@ impl Store for DefaultVault {
     fn private_refresh_certificate(&self) -> &PrivateKey {
         &self.private_refresh_certificate
     }
-
-
 }
 
 
@@ -164,6 +162,92 @@ mod tests {
 
     use std::default::Default;
 
+    #[test]
+    fn test_temporary_token_workflow() {
+        let certificate = CertificateManger::default();
+        // User: John Doe
+        let user_john = "john_doe";
+        let password_for_john = "john";
+        // Save value 'hashed_password_for_john' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_john = hash_password_with_argon(password_for_john, certificate.password_hashing_secret().as_str()).unwrap();
+
+        // User: Jane Doe
+        let user_jane = "jane_doe";
+        let password_for_jane = "jane";
+        // Save 'hashed_password_for_jane' to persistent storage
+        // This is more relevant during user signup/password reset
+        let hashed_password_for_jane = hash_password_with_argon(password_for_jane, certificate.password_hashing_secret().as_str()).unwrap();
+
+        let mut users = HashMap::new();
+
+        // load users and their password from database/somewhere
+        users.insert(user_john.to_string(), hashed_password_for_john.to_string());
+        users.insert(user_jane.to_string(), hashed_password_for_jane.to_string());
+
+        // Initialize vault
+        let mut vault = DefaultVault::new(certificate, users, true);
+
+        let token = block_on(vault.login(user_john, password_for_john, None, None));
+        let token = token.ok().unwrap();
+        let user_account_authentication_token = token.authentication();
+
+        let temp_token = block_on(
+            continue_generate_temporary_authentication_token(&mut vault, user_john, None)
+        );
+        block_thread(1);
+        // This token is one time non-renewable token
+        let temp_token = temp_token.ok().unwrap();
+        let authentication_token = temp_token.authentication();
+
+        // Authentication token is only valid for limited period
+        let public_authentication_certificate = vault.public_authentication_certificate();
+        let result = decode_client_token(public_authentication_certificate, authentication_token);
+        assert!(result.is_ok());
+        let result = result.ok().unwrap();
+        assert_eq!(result.exp() - result.iat(), DEFAULT_TEMPORARY_AUTHENTICATION_EXPIRY_IN_SECONDS);
+
+        let result = block_on(
+            resolve_temporary_session_from_client_authentication_token(&mut vault, user_john, authentication_token)
+        );
+        assert!(result.is_ok());
+        let result = result.ok().unwrap();
+        assert_eq!(result.exp() - result.iat(), DEFAULT_TEMPORARY_AUTHENTICATION_EXPIRY_IN_SECONDS);
+
+        // Temporary session cannot be retrieved using authentication token from user login
+        let result = block_on(
+            resolve_temporary_session_from_client_authentication_token(&mut vault, user_john, user_account_authentication_token)
+        );
+        assert!(result.is_err());
+
+
+        // Using temporary authentication token to retrieve the real user session is not allowed
+        let result = block_on(
+            resolve_session_from_client_authentication_token(&mut vault, user_john, authentication_token)
+        );
+        assert!(result.is_err());
+
+
+        let public_refresh_certificate = vault.public_refresh_certificate();
+        let refresh_token = temp_token.refresh();
+
+        // Refresh token cannot be used to retrieve server session
+        let result = decode_client_token(public_refresh_certificate, refresh_token);
+        assert!(result.is_err());
+
+
+        // Refresh token cannot be used to logout
+        let result = block_on(continue_logout(&mut vault, user_john, authentication_token));
+        assert!(result.is_err());
+
+        // Refresh token cannot be used to revoke
+        let result = block_on(continue_revoke(&mut vault, refresh_token));
+        assert!(result.is_err());
+
+        // Refresh token cannot be used to renew
+        let result = block_on(continue_renew(&mut vault, user_john, refresh_token, None));
+        assert!(result.is_err());
+    }
 
     #[test]
     fn test_trusted_token_bearer_workflow() {

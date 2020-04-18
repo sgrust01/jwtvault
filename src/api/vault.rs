@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use std::hash::Hasher;
+use std::collections::HashMap;
 
 
 /// Return normally if comparision succeeds else return an Error
@@ -21,8 +22,6 @@ pub trait TrustToken {
     /// Implementation Required
     fn trust_token_bearer(&self) -> bool;
 }
-
-
 
 
 /// Workflow for library user
@@ -118,14 +117,36 @@ pub async fn resolve_session_from_client_refresh_token<W, H, D>(vault: &mut W, u
     Ok(server_claims)
 }
 
-pub async fn continue_login<W, H, D>(vault: &mut W, user: &str, pass: &str, refresh_token_expiry_in_seconds: Option<i64>, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+pub async fn resolve_temporary_session_from_client_authentication_token<W, H, D>(vault: &mut W, user: &str, token: &str) -> Result<ServerClaims, Error>
     where H: Hasher + Default, D: Default, W: Workflow<H, D> {
-    let session = vault.check_user_valid(user, pass).await?;
-    let (client, server) = match session {
-        Some(s) => (s.client, s.server),
-        None => (None, None)
-    };
+    let user = DEFAULT_USER_TEMPORARY_TOKEN_FORMAT.replace("{}", user);
+    resolve_session_from_client_authentication_token::<W, H, D>(vault, &user, token).await
+}
 
+pub async fn continue_generate_temporary_authentication_token<W, H, D>(vault: &mut W, user: &str, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+    where H: Hasher + Default, D: Default, W: Workflow<H, D>
+{
+    let authentication_token_expiry_in_seconds = Some(compute_temporary_authentication_token_expiry(None, authentication_token_expiry_in_seconds));
+    let refresh_token_expiry_in_seconds = authentication_token_expiry_in_seconds.clone();
+    let mut server = HashMap::new();
+    // println!("Auth = {:#?} Ref: {:#?}", )
+    let user = DEFAULT_USER_TEMPORARY_TOKEN_FORMAT.replace("{}", user);
+    let key = digest::<_, H>(user.as_bytes());
+    server.insert(key, user.as_bytes().to_vec());
+    let server = Some(server);
+
+    let token = _generate_token::<W, H, D>(vault, &user, None, server, refresh_token_expiry_in_seconds, authentication_token_expiry_in_seconds).await;
+    if token.is_err() {
+        return token;
+    }
+    let token = token.ok().unwrap();
+    let token = Token::new(token.authentication().clone(), "".to_string());
+    Ok(token)
+}
+
+async fn _generate_token<W, H, D>(vault: &mut W, user: &str, client: Option<HashMap<u64, Vec<u8>>>, server: Option<HashMap<u64, Vec<u8>>>, refresh_token_expiry_in_seconds: Option<i64>, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+    where H: Hasher + Default, D: Default, W: Workflow<H, D>
+{
 
     // Prepare: Token params
     let iat = compute_timestamp_in_seconds();
@@ -180,6 +201,16 @@ pub async fn continue_login<W, H, D>(vault: &mut W, user: &str, pass: &str, refr
     let token = Token::new(client_authentication_token, client_refresh_token);
 
     Ok(token)
+}
+
+pub async fn continue_login<W, H, D>(vault: &mut W, user: &str, pass: &str, refresh_token_expiry_in_seconds: Option<i64>, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+    where H: Hasher + Default, D: Default, W: Workflow<H, D> {
+    let session = vault.check_user_valid(user, pass).await?;
+    let (client, server) = match session {
+        Some(s) => (s.client, s.server),
+        None => (None, None)
+    };
+    _generate_token::<W, H, D>(vault, user, client, server, refresh_token_expiry_in_seconds, authentication_token_expiry_in_seconds).await
 }
 
 pub async fn continue_renew<W, H, D>(vault: &mut W, user: &str, client_refresh_token: &String, authentication_token_expiry_in_seconds: Option<i64>) -> Result<String, Error>
