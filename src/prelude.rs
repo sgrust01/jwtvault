@@ -8,7 +8,7 @@ pub use crate::api::certificates::{Store, Keys, PublicKey, PrivateKey};
 pub use crate::api::session::{Session, Token};
 pub use crate::api::persistence::{Persistence, PersistenceHasher};
 pub use crate::api::password::PasswordHasher;
-pub use crate::api::vault::{UserIdentity, UserAuthentication, Workflow, TrustToken, resolve_session_from_client_authentication_token, resolve_session_from_client_refresh_token, continue_login, continue_renew, continue_logout, continue_revoke, continue_generate_temporary_authentication_token, resolve_temporary_session_from_client_authentication_token};
+pub use crate::api::vault::{UserIdentity, UserAuthentication, Workflow, TrustToken, resolve_session_from_client_authentication_token, resolve_session_from_client_refresh_token, continue_login, continue_renew, continue_logout, continue_revoke, continue_generate_temporary_token, resolve_temporary_session_from_client_authentication_token};
 
 pub use crate::errors::{CertificateError, TokenErrors, LoginFailed};
 

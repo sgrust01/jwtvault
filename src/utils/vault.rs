@@ -193,7 +193,7 @@ mod tests {
         let user_account_authentication_token = token.authentication();
 
         let temp_token = block_on(
-            continue_generate_temporary_authentication_token(&mut vault, user_john, None)
+            continue_generate_temporary_token(&mut vault, user_john, None)
         );
         block_thread(1);
         // This token is one time non-renewable token

@@ -54,6 +54,10 @@ impl DynamicVault {
             store,
         }
     }
+    pub async fn generate_temporary_token(&mut self, user: &str, authentication_token_expiry_in_seconds: Option<i64>) -> Result<Token, Error>
+    {
+        continue_generate_temporary_token::<Self, DefaultHasher, ArgonPasswordHasher>(self, user, authentication_token_expiry_in_seconds).await
+    }
 }
 
 impl PersistenceHasher<DefaultHasher> for DynamicVault {}
