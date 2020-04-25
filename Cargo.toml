@@ -1,6 +1,6 @@
 [package]
 name = "jwtvault"
-version = "0.6.1"
+version = "0.7.0"
 authors = ["Saurav Gupta <sgrust01@gmail.com>"]
 description = """
 Highly flexible library to manage and orchestrate JWT workflow
