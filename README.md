@@ -13,6 +13,7 @@
 ![Crates.io](https://img.shields.io/crates/d/jwtvault)
 ![Contributors](https://img.shields.io/github/contributors/sgrust01/jwtvault)
 [![Gitter](https://badges.gitter.im/jwtvault/community.svg)](https://gitter.im/jwtvault/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+![](https://img.shields.io/badge/Say%20Thanks-!-1EAEDB.svg)
 </p>
 
   <h3>
